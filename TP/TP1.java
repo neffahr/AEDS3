@@ -2,11 +2,11 @@ import java.util.*;
 import java.time.LocalDate;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.EOFException;
 import java.io.RandomAccessFile;
 
 class Registro {
     
-    protected boolean lapide; // ?byte
     protected int id;
     protected String org_title;
     protected String title;
@@ -17,24 +17,20 @@ class Registro {
     protected int vote_count;
     protected float vote_average;
     protected int runtime;
-    protected boolean adult; // ?byte
-    protected byte qnt_items;
-    List<String> gen_name;
+    protected byte adult;
+    protected List<String> genre_name;
 
     public Registro() {
-        lapide = false;
         org_language = new byte[2];
         popularity = 0;
         vote_count = 0;
         vote_average = 0;
         runtime=0;
-        adult = false;
-        qnt_items = 0;
-        gen_name = new ArrayList<>();
+        adult = 0;
+        genre_name = new ArrayList<>();
     }
 
-    public Registro(boolean lapide, int id, String org_title, String title, byte[] org_language, String ovr, LocalDate release_date, float popularity, int vote_count, float vote_average, int runtime, boolean adult, byte qnt_items, List<String> gen_name){
-        this.lapide = lapide;
+    public Registro(int id, String org_title, String title, byte[] org_language, String ovr, LocalDate release_date, float popularity, int vote_count, float vote_average, int runtime, byte adult, List<String> genre_name){
         this.id = id;
         this.org_title = org_title;
         this.title = title;
@@ -46,12 +42,7 @@ class Registro {
         this.vote_average = vote_average;
         this.runtime = runtime;
         this.adult = adult;
-        this.qnt_items = qnt_items;
-        this.gen_name = gen_name;
-    }
-
-    public boolean getLapide(){
-        return lapide;
+        this.genre_name = genre_name;
     }
 
     public int getId(){
@@ -90,24 +81,16 @@ class Registro {
         return vote_average;
     }
 
-    public int getLRuntime(){
+    public int getRuntime(){
         return runtime;
     }
 
-    public boolean getAdult(){
+    public byte getAdult(){
         return adult;
     }
 
-    public byte getQntItems(){
-        return qnt_items;
-    }
-
-    public List<String> getGenName(){
-        return gen_name;
-    }
-
-    public void setLapide(boolean lapide){
-        this.lapide = lapide;
+    public List<String> getGenreName(){
+        return genre_name;
     }
 
     public void setId(int id){
@@ -146,33 +129,98 @@ class Registro {
         this.vote_average = vote_average;
     }
 
-    public void setLRuntime(int runtime){
+    public void setRuntime(int runtime){
         this.runtime = runtime;
     }
 
-    public void setAdult(boolean adult){
+    public void setAdult(byte adult){
         this.adult = adult;
     }
 
-    public void setQntItems(byte qnt_items){
-        this.qnt_items = qnt_items;
+    public void setGenreName(List<String> genre_name){
+        this.genre_name = genre_name;
     }
 
-    public void setGenName(List<String> gen_name){
-        this.gen_name = gen_name;
+    private void populate(String line) throws FileNotFoundException, IOException{
+        this.id = line.charAt(0);
+        this.org_title = org_title;
+        this.title = title;
+        this.org_language = org_language;
+        this.ovr = ovr;
+        this.release_date = release_date;
+        this.popularity = popularity;
+        this.vote_count = vote_count;
+        this.vote_average = vote_average;
+        this.runtime = runtime;
+        this.adult = adult;
+        this.genre_name = genre_name;
     }
 
-    public void populate(int id) throws FileNotFoundException, IOException{
-        RandomAccessFile file = new RandomAccessFile("horror_movies.csv", "r");
+    public static void create(Registro reg) throws FileNotFoundException, IOException {
+        RandomAccessFile file = new RandomAccessFile("registros.csv", "rw");
         file.seek(0);
-        file.readLine();
         
+        int lastId;
+        try {
+            lastId = file.readInt();
+        } catch (EOFException e){
+            lastId = 0;
+            file.writeInt(lastId);
+        }
+
+        int cbc = lastId + 1;
+        file.seek(0);
+        file.writeInt(cbc);                                     // Cabeçote (int)                            4 bytes
+
+        file.seek(file.length());
+
+        int tam_reg = 38 + reg.getOrgTitle().getBytes().length + reg.getTitle().getBytes().length + 
+                      reg.getOvr().getBytes().length;
+        for (String str : reg.getGenreName()) {
+            tam_reg += 2 + str.getBytes().length;
+        }
+
+        file.writeByte(0);                                    // Lapide (int)                              4 bytes
+        file.writeInt(tam_reg);                                 // Tamanho do Registro (int)                 4 bytes
+        file.writeInt(reg.getId());                             // ID (int)                                  4 bytes
+        file.write((short)reg.getOrgTitle().length());          // Tamanho string original title (short)     2 bytes
+        file.writeUTF(reg.getOrgTitle());                       // original title (string)                   variavel
+        file.write((short)reg.getTitle().length());             // Tamanho string title (short)              2 bytes
+        file.writeUTF(reg.getTitle());                          // Title (string)                            variavel
+        file.write(reg.getOrgLanguage());                       // original language (string fixa)           2 bytes
+        file.writeInt((short)reg.getOvr().length());            // Tamanho string overview (short)           2 bytes
+        file.writeUTF(reg.getOvr());                            // Overview (string)                         variavel
+        file.writeLong(reg.getReleaseDate().toEpochDay());      // Release date (long)                       8 bytes
+        file.writeFloat(reg.getPopularity());                   // Popularity (float)                        4 bytes   
+        file.writeInt(reg.getVoteCount());                      // Vote count (int)                          4 bytes
+        file.writeFloat(reg.getVoteAverage());                  // Vote average (float)                      4 bytes
+        file.writeInt(reg.getRuntime());                        // Runtime (int)                             4 bytes
+        file.writeByte(reg.getAdult());                         // Adult (boolean)                           1 byte
+        file.writeByte(reg.getGenreName().size());              // Quantidade de itens da lista (byte)       1 byte
         
+        for (String str : reg.getGenreName()) {
+            file.write((short)str.length());                    // Tamanho da string genre name (short)      2 bytes
+            file.writeUTF(str);                                 // Genre name (String)                       variavel
+        }
+
+        file.close();
     }
 
-    public void writeReg() throws FileNotFoundException, IOException {
-        RandomAccessFile file = new RandomAccessFile("registros.csv", "w");
+    
+
+    public static void loadData() throws FileNotFoundException, IOException {
+        RandomAccessFile raf = new RandomAccessFile("horror_movies.csv", "rw");
+        raf.seek(0);
+        raf.readLine(); // To do: check if it goes to bottom line
+        Registro reg = new Registro();
+
+        while (raf.getFilePointer() < raf.length()) { // To do: check condition
+            String line = raf.readUTF();
+            reg.populate(line);
+            create(reg);
+        }
         
+        raf.close();
     }
 }
 
