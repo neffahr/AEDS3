@@ -47,6 +47,24 @@ class Registro {
         this.adult = adult;
         this.genre_name = genre_name;
     }
+    
+    @Override
+    public String toString() {
+        return "Registro {" +
+                "id=" + id +
+                ", org_title='" + org_title + '\'' +
+                ", title='" + title + '\'' +
+                ", org_language='" + new String(org_language) + '\'' + // Converte bytes para String
+                ", overview='" + ovr + '\'' +
+                ", release_date=" + release_date +
+                ", popularity=" + popularity +
+                ", vote_count=" + vote_count +
+                ", vote_average=" + vote_average +
+                ", runtime=" + runtime +
+                ", adult=" + (adult == 1 ? "Yes" : "No") + // Converte byte para legibilidade
+                ", genre_name=" + genre_name +
+                '}';
+    }
 
     public int getId(){
         return id;
@@ -195,9 +213,9 @@ class Registro {
         Registro reg = new Registro();
 
         while (raf.getFilePointer() < raf.length()) { // To do: check condition
-            String line = raf.readUTF();
+            String line = new String(raf.readLine().getBytes("ISO-8859-1"), "UTF-8");
             reg.populate(line);
-            create(reg);
+            create(reg, "registros.bin");
         }
         
         raf.close();
@@ -205,8 +223,8 @@ class Registro {
 
     /*         CRUD OPERATIONS         */
     // CREATE
-    public static void create(Registro reg) throws FileNotFoundException, IOException {
-        RandomAccessFile file = new RandomAccessFile("registros.csv", "rw");
+    public static void create(Registro reg, String fp) throws FileNotFoundException, IOException {
+        RandomAccessFile file = new RandomAccessFile(fp, "rw");
         file.seek(0);
         
         // Verifica se arquivo está vazio. 
@@ -235,13 +253,13 @@ class Registro {
         file.writeByte(0);                                    // Lapide (int)                              4 bytes
         file.writeInt(tam_reg);                                 // Tamanho do Registro (int)                 4 bytes
         file.writeInt(reg.getId());                             // ID (int)                                  4 bytes
-        file.write((short)reg.getOrgTitle().length());          // Tamanho string original title (short)     2 bytes
-        file.writeUTF(reg.getOrgTitle());                       // original title (string)                   variavel
-        file.write((short)reg.getTitle().length());             // Tamanho string title (short)              2 bytes
-        file.writeUTF(reg.getTitle());                          // Title (string)                            variavel
+        file.writeShort(reg.getOrgTitle().length());            // Tamanho string original title (short)     2 bytes
+        file.writeBytes(reg.getOrgTitle());                     // original title (string)                   variavel
+        file.writeShort(reg.getTitle().length());               // Tamanho string title (short)              2 bytes
+        file.writeBytes(reg.getTitle());                        // Title (string)                            variavel
         file.write(reg.getOrgLanguage());                       // original language (string fixa)           2 bytes
-        file.writeInt((short)reg.getOvr().length());            // Tamanho string overview (short)           2 bytes
-        file.writeUTF(reg.getOvr());                            // Overview (string)                         variavel
+        file.writeShort(reg.getOvr().length());                 // Tamanho string overview (short)           2 bytes
+        file.writeBytes(reg.getOvr());                          // Overview (string)                         variavel
         file.writeLong(reg.getReleaseDate().toEpochDay());      // Release date (long)                       8 bytes
         file.writeFloat(reg.getPopularity());                   // Popularity (float)                        4 bytes   
         file.writeInt(reg.getVoteCount());                      // Vote count (int)                          4 bytes
@@ -251,16 +269,74 @@ class Registro {
         file.writeByte(reg.getGenreName().size());              // Quantidade de itens da lista (byte)       1 byte
         
         for (String str : reg.getGenreName()) {
-            file.write((short)str.length());                    // Tamanho da string genre name (short)      2 bytes
-            file.writeUTF(str);                                 // Genre name (String)                       variavel
+            file.writeShort(str.length());                      // Tamanho da string genre name (short)      2 bytes
+            file.writeBytes(str);                               // Genre name (String)                       variavel
         }
 
         file.close();
     }
 
     // READ (ID)
-    public static void read(int id) throws FileNotFoundException, IOException {
+    public static Registro read(int id, String fp) throws FileNotFoundException, IOException {
+        RandomAccessFile file = new RandomAccessFile(fp, "rw");
+        file.seek(0);
+        int totalRegistros = file.readInt();
         
+        for (int i=0; i<totalRegistros; i++) {
+            byte lapide = file.readByte();
+            int tam_reg = file.readInt();
+            int reg_id = file.readInt();
+            
+            if (lapide == 0 && reg_id == id) {
+                Registro reg = new Registro();
+                reg.setId(reg_id);
+                
+                short tam_org_title = file.readShort();
+                byte[] bytes = new byte[tam_org_title];
+                String org_title = new String(bytes, 0, file.read(bytes), "UTF-8");
+                reg.setOrgTitle(org_title);
+                
+                short tam_title = file.readShort();
+                bytes = new byte[tam_title];
+                String title = new String(bytes, 0, file.read(bytes), "UTF-8");
+                reg.setTitle(title);
+                
+                byte[] lang = new byte[2];
+                file.readFully(lang);
+                reg.setOrgLanguage(lang);
+                
+                short tam_ovr = file.readShort();
+                bytes = new byte[tam_ovr];
+                String ovr = new String(bytes, 0, file.read(bytes), "UTF-8");
+                reg.setOvr(ovr);
+                
+                reg.setReleaseDate(LocalDate.ofEpochDay(file.readLong()));
+                reg.setPopularity(file.readFloat());
+                reg.setVoteCount(file.readInt());
+                reg.setVoteAverage(file.readFloat());
+                reg.setRuntime(file.readInt());
+                reg.setAdult(file.readByte());
+                
+                byte qtd_genres = file.readByte();
+                List<String> genres = new ArrayList<>();
+                for (int j = 0; j < qtd_genres; j++) {
+                    short tam_genre = file.readShort();
+                    bytes = new byte[tam_genre];
+                    String genre = new String(bytes, 0, file.read(bytes), "UTF-8");
+                    genre = genre.strip();
+                    genres.add(genre);
+                }
+                reg.setGenreName(genres);
+                
+                file.close();
+                return reg;
+            } else {
+                file.seek(file.getFilePointer() + tam_reg - 4);
+            }
+        }
+        
+        file.close();
+        return null;
     }
 
     // READ (TITLE)
@@ -281,6 +357,121 @@ class Registro {
 
 public class TP1 {
     public static void main(String[] args) {
-        
+        Scanner scanner = new Scanner(System.in);
+        int opcao;
+
+        do {
+            System.out.println("\n=== MENU PRINCIPAL ===");
+            System.out.println("1 - Carregar dados (arquivo binário)");
+            System.out.println("2 - Criar registro");
+            System.out.println("3 - Ler registro por ID");
+            System.out.println("4 - Ler registro por título");
+            System.out.println("5 - Atualizar registro");
+            System.out.println("6 - Deletar registro");
+            System.out.println("7 - Ordenar arquivo (A implementar)");
+            System.out.println("0 - Sair");
+            System.out.print("Escolha uma opção: ");
+
+            opcao = scanner.nextInt();
+            scanner.nextLine(); 
+
+            try {
+                switch (opcao) {
+                    case 1:
+                        Registro.loadData();
+                        System.out.println("Dados carregados com sucesso.");
+                        break;
+
+                    case 2:
+                        Registro reg = inputReg(scanner);
+                        Registro.create(reg, "registros.bin");
+                        System.out.println("Registro criado com sucesso.");
+                        break;
+
+                    case 3:
+                        System.out.print("ID do registro: ");
+                        int id = scanner.nextInt();
+                        System.out.println(Registro.read(id, "registros.bin"));
+                        break;
+
+                    case 4:
+                        System.out.print("Título do registro: ");
+                        String title = scanner.nextLine();
+                        Registro.read(title);
+                        break;
+
+                    case 5:
+                        Registro regAtualizado = inputReg(scanner);
+                        Registro.update(regAtualizado);
+                        System.out.println("Registro atualizado com sucesso.");
+                        break;
+
+                    case 6:
+                        System.out.print("ID do registro a ser deletado: ");
+                        int idDel = scanner.nextInt();
+                        Registro.delete(idDel);
+                        System.out.println("Registro deletado com sucesso.");
+                        break;
+
+                    case 7:
+                        break;
+
+                    case 0:
+                        System.out.println("Saindo...");
+                        break;
+
+                    default:
+                        System.out.println("Opção inválida! Tente novamente.");
+                        break;
+                }
+            } catch (IOException e) {
+                System.out.println("Erro ao executar a operação: " + e.getMessage());
+            }
+        } while (opcao != 0);
+
+        scanner.close();
+    }
+
+    private static Registro inputReg(Scanner scanner) {
+        System.out.print("ID: ");
+        int id = scanner.nextInt();
+        scanner.nextLine();
+
+        System.out.print("Título original: ");
+        String orgTitle = scanner.nextLine();
+
+        System.out.print("Título: ");
+        String title = scanner.nextLine();
+
+        System.out.print("Idioma original (2 caracteres): ");
+        String orgLanguage = scanner.nextLine();
+
+        System.out.print("Descrição: ");
+        String ovr = scanner.nextLine();
+
+        System.out.print("Data de lançamento (YYYY-MM-DD): ");
+        LocalDate releaseDate = LocalDate.parse(scanner.nextLine());
+
+        System.out.print("Popularidade: ");
+        float popularity = scanner.nextFloat();
+
+        System.out.print("Número de votos: ");
+        int voteCount = scanner.nextInt();
+
+        System.out.print("Média de votos: ");
+        float voteAverage = scanner.nextFloat();
+
+        System.out.print("Duração em minutos: ");
+        int runtime = scanner.nextInt();
+
+        System.out.print("Filme adulto? (1 = Sim, 0 = Não): ");
+        byte adult = scanner.nextByte();
+        scanner.nextLine(); 
+
+        System.out.print("Gêneros (separados por vírgula): ");
+        String[] genresArray = scanner.nextLine().split(",");
+        List<String> genreList = Arrays.asList(genresArray);
+
+        return new Registro(id, orgTitle, title, orgLanguage.getBytes(), ovr, releaseDate, popularity, voteCount, voteAverage, runtime, adult, genreList);
     }
 }
