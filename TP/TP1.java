@@ -1,4 +1,5 @@
 import java.util.*;
+import java.util.function.DoubleBinaryOperator;
 import java.time.LocalDate;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -22,6 +23,9 @@ class Registro {
     protected int runtime;
     protected byte adult;
     protected List<String> genre_name;
+
+    public static final String DB_BINARIO = "registros.bin";
+	public static final String FONTE_CSV = "horror_movies.csv";
 
     public Registro() {
         org_language = new byte[2];
@@ -162,11 +166,21 @@ class Registro {
         this.genre_name = genre_name;
     }
 
+    // Define o tamanho de um registro para escrita
+    public int calcTamReg() {
+        int tam_reg = 38 + this.org_title.length() + this.title.length() + 
+                      this.ovr.length();
+        for (String str : this.genre_name) {
+            tam_reg += 2 + str.length();
+        }
+        return tam_reg;
+    }
+
     // Método que recebe uma linha lida do aquivo csv e peenche as informações do objeto
     private void populate(String line) throws FileNotFoundException, IOException{
         List<String> data = splitCSV(line);
 
-        this.id = Integer.parseInt(data.get(1));
+        this.id = Integer.parseInt(data.get(0));
         this.org_title = data.get(2);
         this.title = data.get(3);
         this.org_language = data.get(4).getBytes(StandardCharsets.UTF_8);
@@ -193,7 +207,7 @@ class Registro {
         // 1) "([^"]*)" --> Captura valores dentro das aspas duplas (usado
         // para obter o overview, que tem virgulas dentro)
         // 2) ([^,]+)   --> Captura valores fora das aspas duplas
-        Matcher matcher = Pattern.compile("\"([^\"]*)\"|([^,]+)").matcher(line);
+        Matcher matcher = Pattern.compile("\"((?:[^\"]|\"\")*)\"|([^,]+)").matcher(line);
 
         while (matcher.find()) {
             if (matcher.group(1) != null) { 
@@ -207,7 +221,8 @@ class Registro {
     }
 
     public static void loadData() throws FileNotFoundException, IOException {
-        RandomAccessFile raf = new RandomAccessFile("horror_movies.csv", "rw");
+        RandomAccessFile raf = new RandomAccessFile(FONTE_CSV, "rw");
+        RandomAccessFile bin = new RandomAccessFile(DB_BINARIO, "rw");
         raf.seek(0);
         raf.readLine(); // To do: check if it goes to bottom line
         Registro reg = new Registro();
@@ -215,41 +230,16 @@ class Registro {
         while (raf.getFilePointer() < raf.length()) { // To do: check condition
             String line = new String(raf.readLine().getBytes("ISO-8859-1"), "UTF-8");
             reg.populate(line);
-            create(reg, "registros.bin");
+            create(reg, bin);
         }
         
         raf.close();
+        bin.close();
     }
 
     /*         CRUD OPERATIONS         */
     // CREATE
-    public static void create(Registro reg, String fp) throws FileNotFoundException, IOException {
-        RandomAccessFile file = new RandomAccessFile(fp, "rw");
-        file.seek(0);
-        
-        // Verifica se arquivo está vazio. 
-        // Se sim escreve 0 para quantia de registros. Se não lê a quantia de registros
-        int lastId;
-        try {
-            lastId = file.readInt();
-        } catch (EOFException e){
-            lastId = 0;
-            file.writeInt(lastId);
-        }
-
-        int cbc = lastId + 1;
-        file.seek(0);
-        file.writeInt(cbc);                                     // Cabeçalho (int)                           4 bytes
-
-        file.seek(file.length()); // vai para final do arquivo
-
-        // Define o tamanho de um registro para escrita
-        int tam_reg = 38 + reg.getOrgTitle().getBytes().length + reg.getTitle().getBytes().length + 
-                      reg.getOvr().getBytes().length;
-        for (String str : reg.getGenreName()) {
-            tam_reg += 2 + str.getBytes().length;
-        }
-
+    private static void writeData(Registro reg, int tam_reg, RandomAccessFile file) throws FileNotFoundException, IOException {
         file.writeByte(0);                                    // Lapide (int)                              4 bytes
         file.writeInt(tam_reg);                                 // Tamanho do Registro (int)                 4 bytes
         file.writeInt(reg.getId());                             // ID (int)                                  4 bytes
@@ -272,20 +262,40 @@ class Registro {
             file.writeShort(str.length());                      // Tamanho da string genre name (short)      2 bytes
             file.writeBytes(str);                               // Genre name (String)                       variavel
         }
+    }
+    public static void create(Registro reg, RandomAccessFile file) throws FileNotFoundException, IOException {
+        file.seek(0);
+        
+        // Verifica se arquivo está vazio. 
+        // Se sim escreve 0 para quantia de registros. Se não lê a quantia de registros
+        int lastId;
+        try {
+            lastId = file.readInt();
+        } catch (EOFException e){
+            lastId = 0;
+            file.writeInt(lastId);
+        }
 
-        file.close();
+        int cbc = lastId + 1;
+        file.seek(0);
+        file.writeInt(cbc); // Cabeçalho (int): 4 bytes
+        file.seek(file.length()); // vai para final do arquivo
+        writeData(reg, reg.calcTamReg(), file);
     }
 
     // READ (ID)
-    public static Registro read(int id, String fp) throws FileNotFoundException, IOException {
-        RandomAccessFile file = new RandomAccessFile(fp, "rw");
+    public static Registro read(int id) throws FileNotFoundException, IOException {
+        RandomAccessFile file = new RandomAccessFile(DB_BINARIO, "rw");
         file.seek(0);
         int totalRegistros = file.readInt();
         
         for (int i=0; i<totalRegistros; i++) {
+            long pos = file.getFilePointer();
+
             byte lapide = file.readByte();
             int tam_reg = file.readInt();
             int reg_id = file.readInt();
+            
             
             if (lapide == 0 && reg_id == id) {
                 Registro reg = new Registro();
@@ -331,7 +341,7 @@ class Registro {
                 file.close();
                 return reg;
             } else {
-                file.seek(file.getFilePointer() + tam_reg - 4);
+                file.seek(pos + tam_reg + 5);
             }
         }
         
@@ -340,18 +350,130 @@ class Registro {
     }
 
     // READ (TITLE)
-    public static void read(String title) throws FileNotFoundException, IOException {
+    public static Registro read(String title) throws FileNotFoundException, IOException {
+        RandomAccessFile file = new RandomAccessFile(DB_BINARIO, "rw");
+        file.seek(0);
+        int totalRegistros = file.readInt();
         
+        for (int i=0; i<totalRegistros; i++) {
+            long pos = file.getFilePointer();
+
+            byte lapide = file.readByte();
+            int tam_reg = file.readInt();
+            int reg_id = file.readInt();
+            
+            
+            if (lapide == 0) {
+                Registro reg = new Registro();
+                reg.setId(reg_id);
+
+                short tam_org_title = file.readShort();
+                byte[] bytes = new byte[tam_org_title];
+                String org_title = new String(bytes, 0, file.read(bytes), "UTF-8");
+                reg.setOrgTitle(org_title);
+
+                short tam_title = file.readShort();
+                bytes = new byte[tam_title];
+                String titlereg = new String(bytes, 0, file.read(bytes), "UTF-8");
+                reg.setTitle(title);
+
+                if(title.equals(titlereg)) {
+                    byte[] lang = new byte[2];
+                    file.readFully(lang);
+                    reg.setOrgLanguage(lang);
+                    
+                    short tam_ovr = file.readShort();
+                    bytes = new byte[tam_ovr];
+                    String ovr = new String(bytes, 0, file.read(bytes), "UTF-8");
+                    reg.setOvr(ovr);
+                    
+                    reg.setReleaseDate(LocalDate.ofEpochDay(file.readLong()));
+                    reg.setPopularity(file.readFloat());
+                    reg.setVoteCount(file.readInt());
+                    reg.setVoteAverage(file.readFloat());
+                    reg.setRuntime(file.readInt());
+                    reg.setAdult(file.readByte());
+                    
+                    byte qtd_genres = file.readByte();
+                    List<String> genres = new ArrayList<>();
+                    for (int j = 0; j < qtd_genres; j++) {
+                        short tam_genre = file.readShort();
+                        bytes = new byte[tam_genre];
+                        String genre = new String(bytes, 0, file.read(bytes), "UTF-8");
+                        genre = genre.strip();
+                        genres.add(genre);
+                    }
+                    reg.setGenreName(genres);
+                    
+                    file.close();
+                    return reg;
+                }
+            }
+            file.seek(pos + tam_reg + 5);
+        }
+        
+        file.close();
+        return null;
     }
 
     // UPDATE
-    public static void update(Registro reg) throws FileNotFoundException, IOException {
+    public static boolean update(Registro newreg) throws FileNotFoundException, IOException {
+        RandomAccessFile file = new RandomAccessFile(DB_BINARIO, "rw");
+        file.seek(0);
+        int totalRegistros = file.readInt();
         
+        for (int i=0; i<totalRegistros; i++) {
+            long pos = file.getFilePointer();
+
+            byte lapide = file.readByte();
+            int tam_reg = file.readInt();
+            int reg_id = file.readInt();
+            
+            if (lapide == 0 && reg_id == newreg.getId()) {
+                if(newreg.calcTamReg() <= tam_reg) {
+                    file.seek(pos);
+                    writeData(newreg, tam_reg, file);
+                } else {
+                    file.seek(pos);
+                    file.writeByte(1);
+                    file.seek(file.length());
+                    writeData(newreg, newreg.calcTamReg(), file);
+                }
+                return true;
+            }
+            file.seek(pos + tam_reg + 5);
+        }
+        file.close();
+        return false;
     }
 
     // DELETE
-    public static void delete(int id) throws FileNotFoundException, IOException {
-        
+    public static boolean delete(int id) throws FileNotFoundException, IOException {
+        RandomAccessFile file = new RandomAccessFile(DB_BINARIO, "rw");
+		file.seek(4);
+		long pos;
+
+		while (file.getFilePointer() < file.length()) {
+			pos = file.getFilePointer();
+
+			byte lapide = file.readByte();
+			int tam_reg = file.readInt();
+			int reg_id = file.readInt();
+
+			if (lapide != 1 && reg_id == id) {
+				file.seek(pos);
+
+				file.writeByte(1);
+
+				file.close();
+				return true;
+			} else {
+				file.seek(file.getFilePointer() + tam_reg - 4);
+			}
+		}
+
+		file.close();
+		return false;
     }
 }
 
@@ -362,13 +484,13 @@ public class TP1 {
 
         do {
             System.out.println("\n=== MENU PRINCIPAL ===");
-            System.out.println("1 - Carregar dados (arquivo binário)");
+            System.out.println("1 - Carregar dados");
             System.out.println("2 - Criar registro");
             System.out.println("3 - Ler registro por ID");
             System.out.println("4 - Ler registro por título");
             System.out.println("5 - Atualizar registro");
             System.out.println("6 - Deletar registro");
-            System.out.println("7 - Ordenar arquivo (A implementar)");
+            System.out.println("7 - Ordenar arquivo");
             System.out.println("0 - Sair");
             System.out.print("Escolha uma opção: ");
 
@@ -384,33 +506,44 @@ public class TP1 {
 
                     case 2:
                         Registro reg = inputReg(scanner);
-                        Registro.create(reg, "registros.bin");
+                        RandomAccessFile file = new RandomAccessFile(Registro.DB_BINARIO, "rw");
+                        Registro.create(reg, file);
                         System.out.println("Registro criado com sucesso.");
+                        file.close();
                         break;
 
                     case 3:
                         System.out.print("ID do registro: ");
                         int id = scanner.nextInt();
-                        System.out.println(Registro.read(id, "registros.bin"));
+                        System.out.println(Registro.read(id));
                         break;
 
                     case 4:
                         System.out.print("Título do registro: ");
                         String title = scanner.nextLine();
-                        Registro.read(title);
+                        System.out.println(Registro.read(title));
                         break;
 
                     case 5:
                         Registro regAtualizado = inputReg(scanner);
-                        Registro.update(regAtualizado);
-                        System.out.println("Registro atualizado com sucesso.");
+                        boolean resultup = Registro.update(regAtualizado);
+                        if(resultup) {
+                            System.out.println("Registro atualizado com sucesso.");
+                        } else {
+                            System.out.println("Erro ao atualizar. Registro não existe.");
+                        }
                         break;
 
                     case 6:
                         System.out.print("ID do registro a ser deletado: ");
                         int idDel = scanner.nextInt();
-                        Registro.delete(idDel);
-                        System.out.println("Registro deletado com sucesso.");
+                        boolean resultdel = Registro.delete(idDel);
+                        if(resultdel) {
+                            System.out.println("Registro deletado com sucesso.");
+                        } else {
+                            System.out.println("Erro ao deletar. Registro não existe.");
+                        }
+                        
                         break;
 
                     case 7:
