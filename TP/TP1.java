@@ -1,5 +1,4 @@
 import java.util.*;
-import java.util.function.DoubleBinaryOperator;
 import java.time.LocalDate;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -474,6 +473,103 @@ class Registro {
 
 		file.close();
 		return false;
+    }
+
+
+    /*          ORDENAÇÃO EXTERNA            */
+    private static void insertionSort(Registro[] regs) {
+        for (int i = 1; i < regs.length; i++) {
+            Registro chave = regs[i];
+            int j = i - 1;
+    
+            while (j >= 0 && regs[j].getId() > chave.getId()) {
+                regs[j + 1] = regs[j];
+                j--;
+            }
+            regs[j + 1] = chave;
+        }
+    }
+
+    private static void distribute(int n_reg, int n_arq) throws FileNotFoundException, IOException {
+        RandomAccessFile fp = new RandomAccessFile(DB_BINARIO, "rw");
+        fp.seek(0);
+
+        RandomAccessFile[] tmps = new RandomAccessFile[n_arq];
+        for (int i=0; i<n_arq; i++) {
+            tmps[i] = new RandomAccessFile("temp"+i, "rw");
+            tmps[i].seek(0);
+        }
+
+        int tmp_cnt=0;
+        int totalRegistros = fp.readInt();
+        Registro[] regs = new Registro[n_reg];
+
+        for (int i=0; i<totalRegistros; i+=n_reg) {
+            for (int j=0; j<n_reg; j++) {
+                long pos = fp.getFilePointer();
+                byte lapide = fp.readByte();
+                int tam_reg = fp.readInt();
+
+                if (lapide == 0) {
+                    Registro reg = new Registro();
+                    int reg_id = fp.readInt();
+                    reg.setId(reg_id);
+                
+                    short tam_org_title = fp.readShort();
+                    byte[] bytes = new byte[tam_org_title];
+                    String org_title = new String(bytes, 0, fp.read(bytes), "UTF-8");
+                    reg.setOrgTitle(org_title);
+                    
+                    short tam_title = fp.readShort();
+                    bytes = new byte[tam_title];
+                    String title = new String(bytes, 0, fp.read(bytes), "UTF-8");
+                    reg.setTitle(title);
+                    
+                    byte[] lang = new byte[2];
+                    fp.readFully(lang);
+                    reg.setOrgLanguage(lang);
+                    
+                    short tam_ovr = fp.readShort();
+                    bytes = new byte[tam_ovr];
+                    String ovr = new String(bytes, 0, fp.read(bytes), "UTF-8");
+                    reg.setOvr(ovr);
+                    
+                    reg.setReleaseDate(LocalDate.ofEpochDay(fp.readLong()));
+                    reg.setPopularity(fp.readFloat());
+                    reg.setVoteCount(fp.readInt());
+                    reg.setVoteAverage(fp.readFloat());
+                    reg.setRuntime(fp.readInt());
+                    reg.setAdult(fp.readByte());
+                    
+                    byte qtd_genres = fp.readByte();
+                    List<String> genres = new ArrayList<>();
+                    for (int l = 0; l < qtd_genres; l++) {
+                        short tam_genre = fp.readShort();
+                        bytes = new byte[tam_genre];
+                        String genre = new String(bytes, 0, fp.read(bytes), "UTF-8");
+                        genre = genre.strip();
+                        genres.add(genre);
+                    }
+                    reg.setGenreName(genres);
+
+                    regs[j] = reg;
+                } else {
+                    j--;
+                }
+                fp.seek(pos + tam_reg + 5);
+            }
+
+            insertionSort(regs);
+            for (int j=0; j<n_reg; j++) {
+                create(regs[j], tmps[tmp_cnt]);
+            }
+            tmp_cnt = tmp_cnt+1<n_arq ? tmp_cnt+1 : 0;
+        }
+
+        fp.close();
+        for (int i=0; i<n_arq; i++) {
+            tmps[i].close();
+        }
     }
 }
 
