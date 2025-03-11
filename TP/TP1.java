@@ -490,22 +490,13 @@ class Registro {
         }
     }
 
-    private static void distribute(int n_reg, int n_arq) throws FileNotFoundException, IOException {
-        RandomAccessFile fp = new RandomAccessFile(DB_BINARIO, "rw");
-        fp.seek(0);
-
-        RandomAccessFile[] tmps = new RandomAccessFile[n_arq];
-        for (int i=0; i<n_arq; i++) {
-            tmps[i] = new RandomAccessFile("temp"+i, "rw");
-            tmps[i].seek(0);
-        }
-
+    private static void distribute(int n_reg, int n_arq, RandomAccessFile fp, RandomAccessFile[] tmps) throws FileNotFoundException, IOException {
         int tmp_cnt=0;
         int totalRegistros = fp.readInt();
         Registro[] regs = new Registro[n_reg];
 
-        for (int i=0; i<totalRegistros; i+=n_reg) {
-            for (int j=0; j<n_reg; j++) {
+        for (int i=0; i<totalRegistros;) { 
+            for (int j=0; j<n_reg && i<totalRegistros; j++, i++) {
                 long pos = fp.getFilePointer();
                 byte lapide = fp.readByte();
                 int tam_reg = fp.readInt();
@@ -570,6 +561,23 @@ class Registro {
         for (int i=0; i<n_arq; i++) {
             tmps[i].close();
         }
+    }
+
+    public static void merge(int n_reg, int n_arq, RandomAccessFile fp, RandomAccessFile[] tmps) throws FileNotFoundException, IOException {
+    }
+
+    public static void intercalacaoBalanceada (int n_reg, int n_arq) throws FileNotFoundException, IOException{
+        RandomAccessFile fp = new RandomAccessFile(DB_BINARIO, "rw");
+        fp.seek(0);
+
+        RandomAccessFile[] tmps = new RandomAccessFile[n_arq];
+        for (int i=0; i<n_arq; i++) {
+            tmps[i] = new RandomAccessFile("temp"+i, "rw");
+            tmps[i].seek(0);
+        }
+
+        distribute(n_reg, n_arq, fp, tmps);
+        merge(n_reg, n_arq, fp, tmps);
     }
 }
 
@@ -639,10 +647,14 @@ public class TP1 {
                         } else {
                             System.out.println("Erro ao deletar. Registro não existe.");
                         }
-                        
                         break;
 
                     case 7:
+                        System.out.print("Numero de registros em cada bloco: ");
+                        int n_reg = scanner.nextInt();
+                        System.out.print("Numero de arquivos temporarios a serem usados: ");
+                        int n_arq = scanner.nextInt();
+                        
                         break;
 
                     case 0:
