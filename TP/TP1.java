@@ -340,6 +340,7 @@ class Registro {
                 file.close();
                 return reg;
             } else {
+                i--;
                 file.seek(pos + tam_reg + 5);
             }
         }
@@ -407,6 +408,8 @@ class Registro {
                     file.close();
                     return reg;
                 }
+            } else {
+                i--;
             }
             file.seek(pos + tam_reg + 5);
         }
@@ -563,22 +566,244 @@ class Registro {
         }
     }
 
-    public static void merge(int n_reg, int n_arq, RandomAccessFile fp, RandomAccessFile[] tmps) throws FileNotFoundException, IOException {
-    }
+    public static void merge(int n_reg, int n_arq, RandomAccessFile fp, RandomAccessFile[] tmps)
+			throws FileNotFoundException, IOException {
+		int nivel = 0;
+		int tam_bloco = n_reg;
+		boolean pronto = false;
 
-    public static void intercalacaoBalanceada (int n_reg, int n_arq) throws FileNotFoundException, IOException{
-        RandomAccessFile fp = new RandomAccessFile(DB_BINARIO, "rw");
-        fp.seek(0);
+		RandomAccessFile[] entrada = new RandomAccessFile[n_arq];
+		RandomAccessFile[] saida = new RandomAccessFile[n_arq];
 
-        RandomAccessFile[] tmps = new RandomAccessFile[n_arq];
-        for (int i=0; i<n_arq; i++) {
-            tmps[i] = new RandomAccessFile("temp"+i, "rw");
-            tmps[i].seek(0);
-        }
+		for (int i = 0; i < n_arq; i++) {
+			entrada[i] = new RandomAccessFile("temp" + i, "rw");
+			saida[i] = new RandomAccessFile("output" + i, "rw");
+			entrada[i].seek(0);
+			saida[i].seek(0);
+		}
 
-        distribute(n_reg, n_arq, fp, tmps);
-        merge(n_reg, n_arq, fp, tmps);
-    }
+		while (!pronto) {
+			nivel++;
+
+			for (int i = 0; i < n_arq; i++) {
+				saida[i].setLength(0);
+				saida[i].writeInt(0);
+			}
+
+			int arquivoSaida = 0;
+			boolean ultimoNivel = true;
+
+			int[] contadores = new int[n_arq];
+			for (int i = 0; i < n_arq; i++) {
+				entrada[i].seek(0);
+				try {
+					contadores[i] = entrada[i].readInt();
+				} catch (EOFException e) {
+					contadores[i] = 0;
+				}
+			}
+
+			int arquivosComRegistros = 0;
+			for (int i = 0; i < n_arq; i++) {
+				if (contadores[i] > 0) {
+					arquivosComRegistros++;
+				}
+			}
+
+			if (arquivosComRegistros <= 1) {
+				int arquivoFinal = -1;
+				for (int i = 0; i < n_arq; i++) {
+					if (contadores[i] > 0) {
+						arquivoFinal = i;
+						break;
+					}
+				}
+
+				if (arquivoFinal == -1) {
+					fp.seek(0);
+					fp.getChannel().truncate(0);
+					entrada[arquivoFinal].seek(0);
+
+					int totalRegs = entrada[arquivoFinal].readInt();
+					fp.writeInt(totalRegs);
+
+					byte[] buffer = new byte[4096];
+					int bytesRead;
+
+					while ((bytesRead = entrada[arquivoFinal].read(buffer)) != -1) {
+						fp.write(buffer, 0, bytesRead);
+					}
+				}
+
+				pronto = true;
+				break;
+			}
+
+			while (true) {
+				boolean todosVazios = true;
+				int[] registrosNoBloco = new int[n_arq];
+
+				for (int i = 0; i < n_arq; i++) {
+					registrosNoBloco[i] = Math.min(tam_bloco, contadores[i]);
+					if (registrosNoBloco[i] > 0) {
+						todosVazios = false;
+					}
+				}
+
+				if (todosVazios) {
+					break;
+				}
+
+				intercalarBlocos(entrada, saida[arquivoSaida], registrosNoBloco, n_arq);
+
+				for (int i = 0; i < n_arq; i++) {
+					contadores[i] -= registrosNoBloco[i];
+				}
+
+				arquivoSaida = (arquivoSaida + 1) % n_arq;
+
+				if (arquivoSaida == 0) {
+					ultimoNivel = false;
+				}
+			}
+
+			tam_bloco *= 2;
+
+			RandomAccessFile[] temp = entrada;
+			entrada = saida;
+			saida = temp;
+
+			if (ultimoNivel) {
+				fp.seek(0);
+				entrada[0].seek(0);
+
+				int totalRegs = entrada[0].readInt();
+				fp.writeInt(totalRegs);
+
+				byte[] buffer = new byte[4096];
+				int bytesRead;
+
+				while ((bytesRead = entrada[0].read(buffer)) != -1) {
+					fp.write(buffer, 0, bytesRead);
+				}
+
+				pronto = true;
+			}
+		}
+
+		for (int i = 0; i < n_arq; i++) {
+			entrada[i].close();
+			saida[i].close();
+			new java.io.File("temp" + i).delete();
+			new java.io.File("output" + i).delete();
+		}
+	}
+
+    private static void intercalarBlocos(RandomAccessFile[] arquivos, RandomAccessFile saida,
+			int[] registrosPorArquivo, int n_arq) throws IOException {
+		long[] posicoes = new long[n_arq];
+		int[] ids = new int[n_arq];
+		boolean[] ativo = new boolean[n_arq];
+
+		int[] contadores = new int[n_arq];
+
+		for (int i = 0; i < n_arq; i++) {
+			if (registrosPorArquivo[i] > 0) {
+				posicoes[i] = arquivos[i].getFilePointer();
+				byte lapide = arquivos[i].readByte();
+				int tam_reg = arquivos[i].readInt();
+				ids[i] = arquivos[i].readInt();
+
+				arquivos[i].seek(posicoes[i]);
+
+				ativo[i] = (lapide == 0);
+				if (ativo[i]) {
+					contadores[i] = 1;
+				}
+			} else {
+				ativo[i] = false;
+			}
+		}
+
+		saida.seek(0);
+		int totalRegs;
+		try {
+			totalRegs = saida.readInt();
+		} catch (EOFException e) {
+			totalRegs = 0;
+			saida.writeInt(totalRegs);
+		}
+
+		saida.seek(saida.length());
+
+		while (true) {
+			int menorIdx = -1;
+			int menorId = Integer.MAX_VALUE;
+
+			for (int i = 0; i < n_arq; i++) {
+				if (ativo[i] && ids[i] < menorId) {
+					menorId = ids[i];
+					menorIdx = i;
+				}
+			}
+
+			if (menorIdx == -1) {
+				break;
+			}
+
+			copiarRegistro(arquivos[menorIdx], saida);
+			totalRegs++;
+
+			if (contadores[menorIdx] < registrosPorArquivo[menorIdx]) {
+				long pos = arquivos[menorIdx].getFilePointer();
+				byte lapide = arquivos[menorIdx].readByte();
+				int tam_reg = arquivos[menorIdx].readInt();
+				ids[menorIdx] = arquivos[menorIdx].readInt();
+
+				arquivos[menorIdx].seek(pos);
+
+				ativo[menorIdx] = (lapide == 0);
+				contadores[menorIdx]++;
+			} else {
+				ativo[menorIdx] = false;
+			}
+		}
+
+		saida.seek(0);
+		saida.writeInt(totalRegs);
+	}
+
+    private static void copiarRegistro(RandomAccessFile origem, RandomAccessFile destino)
+			throws IOException {
+		long pos = origem.getFilePointer();
+
+		byte lapide = origem.readByte();
+		int tam_reg = origem.readInt();
+
+		origem.seek(pos);
+
+		byte[] buffer = new byte[tam_reg + 5];
+		origem.readFully(buffer);
+
+		destino.write(buffer);
+
+		origem.seek(pos + tam_reg + 5);
+	}
+
+	public static void intercalacaoBalanceada(int n_reg, int n_arq)
+			throws FileNotFoundException, IOException {
+		RandomAccessFile fp = new RandomAccessFile(DB_BINARIO, "rw");
+		fp.seek(0);
+
+		RandomAccessFile[] tmps = new RandomAccessFile[n_arq];
+		for (int i = 0; i < n_arq; i++) {
+			tmps[i] = new RandomAccessFile("temp" + i, "rw");
+			tmps[i].seek(0);
+		}
+
+		distribute(n_reg, n_arq, fp, tmps);
+		merge(n_reg, n_arq, fp, tmps);
+	}
 }
 
 public class TP1 {
@@ -650,12 +875,21 @@ public class TP1 {
                         break;
 
                     case 7:
-                        System.out.print("Numero de registros em cada bloco: ");
-                        int n_reg = scanner.nextInt();
-                        System.out.print("Numero de arquivos temporarios a serem usados: ");
-                        int n_arq = scanner.nextInt();
-                        
-                        break;
+						System.out.print("Numero de registros em cada bloco: ");
+						int n_reg = scanner.nextInt();
+						System.out.print("Numero de arquivos temporarios a serem usados: ");
+						int n_arq = scanner.nextInt();
+
+						System.out.println("Iniciando ordenação por intercalação balanceada...");
+						long startTime = System.currentTimeMillis();
+
+						Registro.intercalacaoBalanceada(n_reg, n_arq);
+
+						long endTime = System.currentTimeMillis();
+						long executionTime = endTime - startTime;
+
+						System.out.println("Ordenação concluída com sucesso!");
+						break;
 
                     case 0:
                         System.out.println("Saindo...");
