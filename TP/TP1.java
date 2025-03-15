@@ -223,10 +223,10 @@ class Registro {
         RandomAccessFile raf = new RandomAccessFile(FONTE_CSV, "rw");
         RandomAccessFile bin = new RandomAccessFile(DB_BINARIO, "rw");
         raf.seek(0);
-        raf.readLine(); // To do: check if it goes to bottom line
+        raf.readLine();
         Registro reg = new Registro();
 
-        while (raf.getFilePointer() < raf.length()) { // To do: check condition
+        while (raf.getFilePointer() < raf.length()) {
             String line = new String(raf.readLine().getBytes("ISO-8859-1"), "UTF-8");
             reg.populate(line);
             create(reg, bin);
@@ -239,7 +239,7 @@ class Registro {
     /*         CRUD OPERATIONS         */
     // CREATE
     private static void writeData(Registro reg, int tam_reg, RandomAccessFile file) throws FileNotFoundException, IOException {
-        file.writeByte(0);                                    // Lapide (int)                              4 bytes
+        file.writeByte(0);                                    // Lapide (int)                              1 byte
         file.writeInt(tam_reg);                                 // Tamanho do Registro (int)                 4 bytes
         file.writeInt(reg.getId());                             // ID (int)                                  4 bytes
         file.writeShort(reg.getOrgTitle().length());            // Tamanho string original title (short)     2 bytes
@@ -452,7 +452,7 @@ class Registro {
     // DELETE
     public static boolean delete(int id) throws FileNotFoundException, IOException {
         RandomAccessFile file = new RandomAccessFile(DB_BINARIO, "rw");
-		file.seek(4);
+		int totalRegistros = file.readInt();
 		long pos;
 
 		while (file.getFilePointer() < file.length()) {
@@ -466,6 +466,8 @@ class Registro {
 				file.seek(pos);
 
 				file.writeByte(1);
+                file.seek(0);
+                file.writeInt(totalRegistros-1);
 
 				file.close();
 				return true;
@@ -493,7 +495,50 @@ class Registro {
         }
     }
 
-    private static void distribute(int n_reg, int n_arq, RandomAccessFile fp, RandomAccessFile[] tmps) throws FileNotFoundException, IOException {
+    private static Registro readIB(RandomAccessFile fp) throws IOException{
+        Registro reg = new Registro();
+        int reg_id = fp.readInt();
+        reg.setId(reg_id);
+                
+        short tam_org_title = fp.readShort();
+        byte[] bytes = new byte[tam_org_title];
+        String org_title = new String(bytes, 0, fp.read(bytes), "UTF-8");
+        reg.setOrgTitle(org_title);
+                    
+        short tam_title = fp.readShort();
+        bytes = new byte[tam_title];
+        String title = new String(bytes, 0, fp.read(bytes), "UTF-8");
+        reg.setTitle(title);
+                    
+        byte[] lang = new byte[2];
+        fp.readFully(lang);
+        reg.setOrgLanguage(lang);
+                    
+        short tam_ovr = fp.readShort();
+        bytes = new byte[tam_ovr];
+        String ovr = new String(bytes, 0, fp.read(bytes), "UTF-8");
+        reg.setOvr(ovr);
+                    
+        reg.setReleaseDate(LocalDate.ofEpochDay(fp.readLong()));
+        reg.setPopularity(fp.readFloat());
+        reg.setVoteCount(fp.readInt());
+        reg.setVoteAverage(fp.readFloat());
+        reg.setRuntime(fp.readInt());
+        reg.setAdult(fp.readByte());
+                    
+        byte qtd_genres = fp.readByte();
+        List<String> genres = new ArrayList<>();
+        for (int l = 0; l < qtd_genres; l++) {
+            short tam_genre = fp.readShort();
+            bytes = new byte[tam_genre];
+            String genre = new String(bytes, 0, fp.read(bytes), "UTF-8");
+            genre = genre.strip();
+            genres.add(genre);
+        }
+        reg.setGenreName(genres);
+        return reg;
+    }
+    private static void distribute(int n_reg, int n_arq, RandomAccessFile fp, RandomAccessFile[] tmps) throws IOException {
         int tmp_cnt=0;
         int totalRegistros = fp.readInt();
         Registro[] regs = new Registro[n_reg];
@@ -505,50 +550,11 @@ class Registro {
                 int tam_reg = fp.readInt();
 
                 if (lapide == 0) {
-                    Registro reg = new Registro();
-                    int reg_id = fp.readInt();
-                    reg.setId(reg_id);
-                
-                    short tam_org_title = fp.readShort();
-                    byte[] bytes = new byte[tam_org_title];
-                    String org_title = new String(bytes, 0, fp.read(bytes), "UTF-8");
-                    reg.setOrgTitle(org_title);
-                    
-                    short tam_title = fp.readShort();
-                    bytes = new byte[tam_title];
-                    String title = new String(bytes, 0, fp.read(bytes), "UTF-8");
-                    reg.setTitle(title);
-                    
-                    byte[] lang = new byte[2];
-                    fp.readFully(lang);
-                    reg.setOrgLanguage(lang);
-                    
-                    short tam_ovr = fp.readShort();
-                    bytes = new byte[tam_ovr];
-                    String ovr = new String(bytes, 0, fp.read(bytes), "UTF-8");
-                    reg.setOvr(ovr);
-                    
-                    reg.setReleaseDate(LocalDate.ofEpochDay(fp.readLong()));
-                    reg.setPopularity(fp.readFloat());
-                    reg.setVoteCount(fp.readInt());
-                    reg.setVoteAverage(fp.readFloat());
-                    reg.setRuntime(fp.readInt());
-                    reg.setAdult(fp.readByte());
-                    
-                    byte qtd_genres = fp.readByte();
-                    List<String> genres = new ArrayList<>();
-                    for (int l = 0; l < qtd_genres; l++) {
-                        short tam_genre = fp.readShort();
-                        bytes = new byte[tam_genre];
-                        String genre = new String(bytes, 0, fp.read(bytes), "UTF-8");
-                        genre = genre.strip();
-                        genres.add(genre);
-                    }
-                    reg.setGenreName(genres);
-
+                    Registro reg = readIB(fp);
                     regs[j] = reg;
                 } else {
                     j--;
+                    i--;
                 }
                 fp.seek(pos + tam_reg + 5);
             }
@@ -557,45 +563,31 @@ class Registro {
             for (int j=0; j<n_reg; j++) {
                 create(regs[j], tmps[tmp_cnt]);
             }
-            tmp_cnt = tmp_cnt+1<n_arq ? tmp_cnt+1 : 0;
-        }
-
-        fp.close();
-        for (int i=0; i<n_arq; i++) {
-            tmps[i].close();
+            tmp_cnt = (tmp_cnt + 1) % n_arq;
         }
     }
 
-    public static void merge(int n_reg, int n_arq, RandomAccessFile fp, RandomAccessFile[] tmps)
-			throws FileNotFoundException, IOException {
-		int nivel = 0;
-		int tam_bloco = n_reg;
-		boolean pronto = false;
+    public static void merge(int n_reg, int n_arq, RandomAccessFile fp, RandomAccessFile[] entrada)
+			throws IOException {
+		// Variáveis para controlar a intercalação
+        int tam_bloco = n_reg;   // Tamanho inicial do bloco (igual ao usado na distribuição)
+        boolean end = false;     // Flag para controlar o término da intercalação
 
-		RandomAccessFile[] entrada = new RandomAccessFile[n_arq];
+        // Lista de arquivos temporários de saída
 		RandomAccessFile[] saida = new RandomAccessFile[n_arq];
-
+        // Inicializa os arquivos de entrada com os temporários criados na distribuição
 		for (int i = 0; i < n_arq; i++) {
-			entrada[i] = new RandomAccessFile("temp" + i, "rw");
-			saida[i] = new RandomAccessFile("output" + i, "rw");
+			saida[i] = new RandomAccessFile("output" + i + ".bin", "rw");
 			entrada[i].seek(0);
 			saida[i].seek(0);
 		}
 
-		while (!pronto) {
-			nivel++;
+        // Continua intercalando até que todos os registros estejam ordenados
+		while (!end) {
 
-			for (int i = 0; i < n_arq; i++) {
-				saida[i].setLength(0);
-				saida[i].writeInt(0);
-			}
-
-			int arquivoSaida = 0;
-			boolean ultimoNivel = true;
-
+            // Define numero de registros de cada arquivo temp
 			int[] contadores = new int[n_arq];
 			for (int i = 0; i < n_arq; i++) {
-				entrada[i].seek(0);
 				try {
 					contadores[i] = entrada[i].readInt();
 				} catch (EOFException e) {
@@ -603,6 +595,8 @@ class Registro {
 				}
 			}
 
+            // Verifica se há mais de um arquivo com registros 
+            // Se houver, não é o último nível de intercalação
 			int arquivosComRegistros = 0;
 			for (int i = 0; i < n_arq; i++) {
 				if (contadores[i] > 0) {
@@ -610,6 +604,7 @@ class Registro {
 				}
 			}
 
+            // Se só há um arquivo com registros, a intercalação está completa
 			if (arquivosComRegistros <= 1) {
 				int arquivoFinal = -1;
 				for (int i = 0; i < n_arq; i++) {
@@ -619,175 +614,183 @@ class Registro {
 					}
 				}
 
-				if (arquivoFinal == -1) {
-					fp.seek(0);
-					fp.getChannel().truncate(0);
-					entrada[arquivoFinal].seek(0);
+                // Copia o arquivo final para o arquivo original
+				fp.setLength(0);
+				entrada[arquivoFinal].seek(0);
 
-					int totalRegs = entrada[arquivoFinal].readInt();
-					fp.writeInt(totalRegs);
-
-					byte[] buffer = new byte[4096];
-					int bytesRead;
-
-					while ((bytesRead = entrada[arquivoFinal].read(buffer)) != -1) {
-						fp.write(buffer, 0, bytesRead);
-					}
-				}
-
-				pronto = true;
-				break;
-			}
-
-			while (true) {
-				boolean todosVazios = true;
-				int[] registrosNoBloco = new int[n_arq];
-
-				for (int i = 0; i < n_arq; i++) {
-					registrosNoBloco[i] = Math.min(tam_bloco, contadores[i]);
-					if (registrosNoBloco[i] > 0) {
-						todosVazios = false;
-					}
-				}
-
-				if (todosVazios) {
-					break;
-				}
-
-				intercalarBlocos(entrada, saida[arquivoSaida], registrosNoBloco, n_arq);
-
-				for (int i = 0; i < n_arq; i++) {
-					contadores[i] -= registrosNoBloco[i];
-				}
-
-				arquivoSaida = (arquivoSaida + 1) % n_arq;
-
-				if (arquivoSaida == 0) {
-					ultimoNivel = false;
-				}
-			}
-
-			tam_bloco *= 2;
-
-			RandomAccessFile[] temp = entrada;
-			entrada = saida;
-			saida = temp;
-
-			if (ultimoNivel) {
-				fp.seek(0);
-				entrada[0].seek(0);
-
-				int totalRegs = entrada[0].readInt();
+                // Copia o cabeçalho (número de registros)
+				int totalRegs = entrada[arquivoFinal].readInt();
 				fp.writeInt(totalRegs);
 
-				byte[] buffer = new byte[4096];
+                // Copia todos os registros
+				byte[] buffer = new byte[4096]; // Buffer para cópia eficiente
 				int bytesRead;
 
-				while ((bytesRead = entrada[0].read(buffer)) != -1) {
+				while ((bytesRead = entrada[arquivoFinal].read(buffer)) != -1) {
 					fp.write(buffer, 0, bytesRead);
 				}
 
-				pronto = true;
-			}
-		}
-
-		for (int i = 0; i < n_arq; i++) {
-			entrada[i].close();
-			saida[i].close();
-			new java.io.File("temp" + i).delete();
-			new java.io.File("output" + i).delete();
-		}
-	}
-
-    private static void intercalarBlocos(RandomAccessFile[] arquivos, RandomAccessFile saida,
-			int[] registrosPorArquivo, int n_arq) throws IOException {
-		long[] posicoes = new long[n_arq];
-		int[] ids = new int[n_arq];
-		boolean[] ativo = new boolean[n_arq];
-
-		int[] contadores = new int[n_arq];
-
-		for (int i = 0; i < n_arq; i++) {
-			if (registrosPorArquivo[i] > 0) {
-				posicoes[i] = arquivos[i].getFilePointer();
-				byte lapide = arquivos[i].readByte();
-				int tam_reg = arquivos[i].readInt();
-				ids[i] = arquivos[i].readInt();
-
-				arquivos[i].seek(posicoes[i]);
-
-				ativo[i] = (lapide == 0);
-				if (ativo[i]) {
-					contadores[i] = 1;
-				}
-			} else {
-				ativo[i] = false;
-			}
-		}
-
-		saida.seek(0);
-		int totalRegs;
-		try {
-			totalRegs = saida.readInt();
-		} catch (EOFException e) {
-			totalRegs = 0;
-			saida.writeInt(totalRegs);
-		}
-
-		saida.seek(saida.length());
-
-		while (true) {
-			int menorIdx = -1;
-			int menorId = Integer.MAX_VALUE;
-
-			for (int i = 0; i < n_arq; i++) {
-				if (ativo[i] && ids[i] < menorId) {
-					menorId = ids[i];
-					menorIdx = i;
-				}
-			}
-
-			if (menorIdx == -1) {
+				end = true;
 				break;
 			}
 
-			copiarRegistro(arquivos[menorIdx], saida);
-			totalRegs++;
+            // Se ainda deve fazer mais intercalações (+1 arquivo com regs)
+            // Processa blocos de arquivos de entrada
+			while (true) {
+                // Em cada nível, resetamos os n arquivos de saída
+                for (int i = 0; i < n_arq; i++) {
+                    saida[i].setLength(0); // Limpa o arquivo de saída
+                    saida[i].writeInt(0); // Inicializa o contador de registros
+                }
 
-			if (contadores[menorIdx] < registrosPorArquivo[menorIdx]) {
-				long pos = arquivos[menorIdx].getFilePointer();
-				byte lapide = arquivos[menorIdx].readByte();
-				int tam_reg = arquivos[menorIdx].readInt();
-				ids[menorIdx] = arquivos[menorIdx].readInt();
+                // Intercala registros dos n arquivos para o arquivo de saída atual
+				intercalar(entrada, saida, tam_bloco, n_arq);
 
-				arquivos[menorIdx].seek(pos);
+                // Se esta foi a ultima intercalação (apenas 1 arq de saída cheio),
+                boolean lastItc = true;
+                for (int i=1; i<n_arq; i++) {
+                    if (saida[i].length() != 4) {
+                        lastItc = false;
+                    }
+                }
 
-				ativo[menorIdx] = (lapide == 0);
-				contadores[menorIdx]++;
-			} else {
-				ativo[menorIdx] = false;
+                // Se é ultima intercalação escreve resultado no arquivo de dados
+                if (lastItc) {
+                    fp.seek(0);
+                    int totalRegs = fp.readInt();
+                    fp.setLength(0); // Limpa o arquivo de saída
+                    fp.seek(0);
+                    saida[0].seek(0);
+
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+
+                    while ((bytesRead = saida[0].read(buffer)) != -1) {
+                        fp.write(buffer, 0, bytesRead);
+                    }
+
+                    fp.seek(0);
+                    fp.writeInt(totalRegs);
+
+                    end = true;
+                    break;
+                }
+
+                // Dobra o tamanho do bloco para a próxima intercalação
+			    tam_bloco *= 2;
+
+                // Troca os arquivos de entrada e saída para a próxima fase
+                RandomAccessFile[] temp = entrada;
+                entrada = saida;
+                saida = temp;
 			}
 		}
 
-		saida.seek(0);
-		saida.writeInt(totalRegs);
+        // Fecha e remove todos os arquivos temporarios
+		for (int i = 0; i < n_arq; i++) {
+			entrada[i].close();
+			saida[i].close();
+			new java.io.File("temp" + i + ".bin").delete();
+			new java.io.File("output" + i + ".bin").delete();
+		}
 	}
 
-    private static void copiarRegistro(RandomAccessFile origem, RandomAccessFile destino)
-			throws IOException {
-		long pos = origem.getFilePointer();
+    private static void intercalar(RandomAccessFile[] entrada, RandomAccessFile[] saida, int tam_seg, int n_arq) throws IOException {
+        // Armazena a posição dos regs lidos os respectivos registros (uso do id)
+		long[] posicoes = new long[n_arq]; // Ponteiro de cada arquivo
+		Registro[] regs = new Registro[n_arq];
+        int[] count_arq = new int[n_arq]; // contagem de vezes que um arq foi lido
+        int ativos = 0; // determina qnts arquivos com regs tem
 
-		byte lapide = origem.readByte();
-		int tam_reg = origem.readInt();
+        int qnt_regs_seg = 0; // quantidade de registros por segmento
+        int tam_maior_arq = -1; // tamanho do maior arq (para calculos)
 
-		origem.seek(pos);
+        for (int i=0; i<n_arq; i++) {
+            entrada[i].seek(0);
+            int tam_arq = entrada[i].readInt();
+            // Acha o maior arq
+            if(tam_arq > tam_maior_arq) {
+                tam_maior_arq = tam_arq;
+            }
+            // Calc qnt de arq com regs
+            if (tam_arq > 0) {
+                ativos += 1;
+            }
+        }
+        // quantidade de segmentos totais para iterar
+        int qnt_segs = (int) Math.ceil(tam_maior_arq/(double)tam_seg);
+        // calc de registros por segmento
+        qnt_regs_seg += tam_seg*ativos;
 
-		byte[] buffer = new byte[tam_reg + 5];
-		origem.readFully(buffer);
+        int arq_saida = 0;
+        for (int seg = 0; seg < qnt_segs; seg++) { // Iteração sobre os segmentos
+            int idxmenor = -1;
+            for (int i=0; i<n_arq; i++) {
+                count_arq[i] = 0; // contagem inicia em 0
+            }
 
-		destino.write(buffer);
-
-		origem.seek(pos + tam_reg + 5);
+            for (int i = 0; i < qnt_regs_seg; i++) { // Iteração sobre os registros dos segmentos
+                // Iteração sobre os ids de cada arq
+                // Se for 1a iteração, le todos os ids da coluna
+                // Se não, avança com a posição do menor lido na ultima iteração e lê o id novo
+                for (int j=0; j<n_arq; j++) {
+                    if (i==0) {
+                        try {
+                            posicoes[j] = entrada[j].getFilePointer();
+                            entrada[j].readByte();
+                            entrada[j].readInt();
+                            regs[j] = readIB(entrada[j]);
+                            posicoes[j] = entrada[j].getFilePointer();
+                            count_arq[j]++;
+                        } catch (EOFException e) {
+                            // Se chegar no fim do arq ids devem ser os maiores para não
+                            // atrapalhar a escolha do menor
+                            if (regs[j] == null) {
+                                regs[j] = new Registro();
+                            }
+                            regs[j].setId(Integer.MAX_VALUE);
+                        }
+                    } else {
+                        j = idxmenor;
+                        try {
+                            entrada[j].readByte();
+                            entrada[j].readInt();
+                            // Restrição para não passar do limite do segmento no arquivo
+                            if (count_arq[j] < tam_seg) { 
+                                regs[j] = readIB(entrada[j]);
+                                posicoes[j] = entrada[j].getFilePointer();
+                                count_arq[j]++;
+                            } else {
+                                regs[j].setId(Integer.MAX_VALUE);
+                                entrada[j].seek(posicoes[j]);
+                            }
+                            break; 
+                        } catch (EOFException e){
+                            if (regs[j] == null) {
+                                regs[j] = new Registro();
+                            }
+                            regs[j].setId(Integer.MAX_VALUE);
+                            break;
+                        }
+                    }
+                }
+                
+                // Acha o menor id dentre os ids lidos e coloca no arq de saída
+                Registro menor = new Registro();
+                menor.setId(Integer.MAX_VALUE);
+                for (int j=0; j<n_arq; j++) {
+                    if (regs[j].getId() < menor.getId()) {
+                        menor = regs[j];
+                        idxmenor = j;
+                    }
+                }
+                if (menor.getId() != Integer.MAX_VALUE) {
+                    create(menor, saida[arq_saida]);
+                }
+            }
+            // Atualiza numero do arquivo de saida após cada segmento
+            arq_saida = (arq_saida + 1) % n_arq;
+        }
 	}
 
 	public static void intercalacaoBalanceada(int n_reg, int n_arq)
@@ -797,12 +800,14 @@ class Registro {
 
 		RandomAccessFile[] tmps = new RandomAccessFile[n_arq];
 		for (int i = 0; i < n_arq; i++) {
-			tmps[i] = new RandomAccessFile("temp" + i, "rw");
+			tmps[i] = new RandomAccessFile("temp" + i + ".bin", "rw");
 			tmps[i].seek(0);
 		}
 
 		distribute(n_reg, n_arq, fp, tmps);
 		merge(n_reg, n_arq, fp, tmps);
+
+        fp.close();
 	}
 }
 
@@ -879,15 +884,8 @@ public class TP1 {
 						int n_reg = scanner.nextInt();
 						System.out.print("Numero de arquivos temporarios a serem usados: ");
 						int n_arq = scanner.nextInt();
-
 						System.out.println("Iniciando ordenação por intercalação balanceada...");
-						long startTime = System.currentTimeMillis();
-
 						Registro.intercalacaoBalanceada(n_reg, n_arq);
-
-						long endTime = System.currentTimeMillis();
-						long executionTime = endTime - startTime;
-
 						System.out.println("Ordenação concluída com sucesso!");
 						break;
 
