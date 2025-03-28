@@ -1,0 +1,14 @@
+isbn13,isbn10,title,subtitle,authors,categories,thumbnail,description,published_year,average_rating,num_pages,ratings_count
+
+isbn13 -> String tamanho fixo
+isbn10 -> String tamanho fixo
+title -> String tamanho variavel
+subtitle -> String tamanho variavel
+authors -> String tamanho variavel uma ou mais entradas separadas por ';'
+categories -> String tamanho variavel separadas por ';'
+thumbnail -> String tamanho variavel(é uma url)
+description -> String tamanho variavel
+published_year -> Inteiro ano da publicacao
+average_rating -> float
+num_pages -> inteiro numero de paginas
+ratings_count -> inteiro numero de avaliacoes

@@ -23,8 +23,8 @@ class Registro {
     protected byte adult;
     protected List<String> genre_name;
 
-    public static final String DB_BINARIO = "registros.bin";
-	public static final String FONTE_CSV = "horror_movies.csv";
+    public static final String DB_BINARIO = "./arqs/registros.bin";
+	public static final String FONTE_CSV = "./arqs/horror_movies.csv";
 
     public Registro() {
         org_language = new byte[2];
@@ -577,7 +577,7 @@ class Registro {
 		RandomAccessFile[] saida = new RandomAccessFile[n_arq];
         // Inicializa os arquivos de entrada com os temporários criados na distribuição
 		for (int i = 0; i < n_arq; i++) {
-			saida[i] = new RandomAccessFile("output" + i + ".bin", "rw");
+			saida[i] = new RandomAccessFile("./arqs/output" + i + ".bin", "rw");
 			entrada[i].seek(0);
 			saida[i].seek(0);
 		}
@@ -690,8 +690,8 @@ class Registro {
 		for (int i = 0; i < n_arq; i++) {
 			entrada[i].close();
 			saida[i].close();
-			new java.io.File("temp" + i + ".bin").delete();
-			new java.io.File("output" + i + ".bin").delete();
+			new java.io.File("./arqs/temp" + i + ".bin").delete();
+			new java.io.File("./arqs/output" + i + ".bin").delete();
 		}
 	}
 
@@ -800,7 +800,7 @@ class Registro {
 
 		RandomAccessFile[] tmps = new RandomAccessFile[n_arq];
 		for (int i = 0; i < n_arq; i++) {
-			tmps[i] = new RandomAccessFile("temp" + i + ".bin", "rw");
+			tmps[i] = new RandomAccessFile("./arqs/temp" + i + ".bin", "rw");
 			tmps[i].seek(0);
 		}
 
