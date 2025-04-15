@@ -9,6 +9,7 @@ public class BTree {
     protected int ordem;
     public static final String INDEX_FILE = "./arqs/btree_index.bin";
 
+    /*      PAGINA      */
     private class Pagina {
         protected ArrayList<Integer> ids;
         protected ArrayList<Long> ends;
@@ -38,12 +39,23 @@ public class BTree {
         }
     }
 
-    
-
+    /*       ARVORE B     */
     public BTree (int ordem) {
         this.ordem = ordem;
     }
 
+    public static void Read() throws FileNotFoundException, IOException {
+        RandomAccessFile raf = new RandomAccessFile(INDEX_FILE, "rw");
+        raf.seek(0);
+        raf.readLine();
+        Registro reg = new Registro();
+
+        while (raf.getFilePointer() < raf.length()) {
+            
+        }
+        
+        raf.close();
+    }
     
 }
 

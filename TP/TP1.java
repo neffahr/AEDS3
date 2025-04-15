@@ -495,7 +495,7 @@ class Registro {
         }
     }
 
-    private static Registro readIB(RandomAccessFile fp) throws IOException{
+    public static Registro readIB(RandomAccessFile fp) throws IOException{
         Registro reg = new Registro();
         int reg_id = fp.readInt();
         reg.setId(reg_id);
@@ -809,6 +809,19 @@ class Registro {
 
         fp.close();
 	}
+
+    public static long getLength() throws IOException {
+        RandomAccessFile raf = new RandomAccessFile(Registro.DB_BINARIO, "r");
+        long tam = raf.length();
+        raf.close();
+        return tam;
+    }
+
+    public static int getLastId() throws IOException {
+        RandomAccessFile file = new RandomAccessFile(DB_BINARIO, "r");
+        file.seek(0);
+        return file.readInt();
+    }
 }
 
 public class TP1 {
