@@ -245,7 +245,7 @@ public class TP2 {
                         System.out.println("Elemento não encontrado");
                     else {
                         RandomAccessFile file_read = new RandomAccessFile(Registro.DB_BINARIO, "rw");
-                        file_read.seek(pos);
+                        file_read.seek(pos+5); // pular lapide + tam_reg
                         System.out.println(Registro.readIB(file_read));
                         file_read.close();
                     }
