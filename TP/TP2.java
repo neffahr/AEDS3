@@ -1,9 +1,6 @@
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class TP2 {
     public static final String HASH_BUCKETS = "./arqs/hash_buckets.bin";
@@ -70,7 +67,7 @@ public class TP2 {
                     case 2:
                         estruturaAtual = EstruturaDados.HASH;
                         System.out.println("Estrutura de dados selecionada: Hash");
-                        inicializarHash();
+                        inicializarHash(scanner);
                         break;
                     case 3:
                         estruturaAtual = EstruturaDados.LISTA_INVERTIDA;
@@ -122,11 +119,11 @@ public class TP2 {
         }
     }
     
-    private static void inicializarHash() {
+    private static void inicializarHash(Scanner scanner) {
         try {
             // Código para inicializar a estrutura hash
             System.out.println("Inicializando estrutura Hash...");
-            // Hash.inicializar();
+            menuHash(scanner);
         } catch (Exception e) {
             System.out.println("Erro ao inicializar Hash: " + e.getMessage());
         }
@@ -199,20 +196,21 @@ public class TP2 {
     
     private static int menuHash(Scanner scanner) throws Exception {
         int capBucket;
+        IdxHash idx;
 
         if (new File(HASH_METADADOS).exists()) {
             DataInputStream dis = new DataInputStream(new FileInputStream(new File(HASH_METADADOS)));
             capBucket = dis.readInt();
+            idx = new IdxHash(capBucket);
         } else {
             System.out.println("\n=== INICIALIZAÇÃO ===");
             System.out.print("Escolha a capacidade de um bucket: ");
             capBucket = scanner.nextInt();
             scanner.nextLine();
-
             new DataOutputStream(new FileOutputStream(new File(HASH_METADADOS))).writeInt(capBucket);
+            idx = new IdxHash(capBucket);
+            idx.loadHash();
         }
-
-        IdxHash idx = new IdxHash(capBucket, HASH_DIRETORIO, HASH_BUCKETS);
 
         System.out.println("\n=== MENU HASH ===");
         System.out.println("1 - Criar registro");

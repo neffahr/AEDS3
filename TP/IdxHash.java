@@ -5,6 +5,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
+import java.util.Hashtable;
 
 public class IdxHash {
 
@@ -14,6 +15,10 @@ public class IdxHash {
     RandomAccessFile arqCestos;
     int quantidadeDadosPorCesto;
     Diretorio diretorio;
+
+    public static final String HASH_BUCKETS = "./arqs/hash_buckets.bin";
+    public static final String HASH_DIRETORIO = "./arqs/hash_diretorio.bin";
+    public static final String HASH_METADADOS = "./arqs/hash_meta.bin";
 
     public class Bucket {
 
@@ -246,10 +251,10 @@ public class IdxHash {
         }
     }
 
-    public IdxHash(int n, String nd, String nc) throws Exception {
+    public IdxHash(int n) throws Exception {
         quantidadeDadosPorCesto = n;
-        nomeArquivoDiretorio = nd;
-        nomeArquivoCestos = nc;
+        nomeArquivoDiretorio = HASH_DIRETORIO;
+        nomeArquivoCestos = HASH_BUCKETS;
 
         arqDiretorio = new RandomAccessFile(nomeArquivoDiretorio, "rw");
         arqCestos = new RandomAccessFile(nomeArquivoCestos, "rw");
@@ -264,6 +269,23 @@ public class IdxHash {
             arqCestos.seek(0);
             arqCestos.write(bd);
         }
+    }
+
+    public void loadHash() throws Exception {
+        RandomAccessFile dataf = new RandomAccessFile(Registro.DB_BINARIO, "rw");
+        Registro reg = new Registro();
+        dataf.seek(4); // Pula cabeçalho
+
+        while (dataf.getFilePointer() < dataf.length()) {
+            long pos = dataf.getFilePointer();
+            dataf.seek(pos+5); // Pula lapide e o tamanho do reg
+
+            reg = Registro.readIB(dataf);
+
+            create(reg.getId(), pos); // cria par id, pos na arvore
+        }
+
+        dataf.close();
     }
 
     public boolean create(int id, long posicao) throws Exception {

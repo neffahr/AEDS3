@@ -238,7 +238,7 @@ class Registro {
 
     /*         CRUD OPERATIONS         */
     // CREATE
-    private static void writeData(Registro reg, int tam_reg, RandomAccessFile file) throws FileNotFoundException, IOException {
+    public static void writeData(Registro reg, int tam_reg, RandomAccessFile file) throws FileNotFoundException, IOException {
         file.writeByte(0);                                    // Lapide (int)                              1 byte
         file.writeInt(tam_reg);                                 // Tamanho do Registro (int)                 4 bytes
         file.writeInt(reg.getId());                             // ID (int)                                  4 bytes
@@ -821,6 +821,25 @@ class Registro {
         RandomAccessFile file = new RandomAccessFile(DB_BINARIO, "r");
         file.seek(0);
         return file.readInt();
+    }
+
+    public static long getPos(Registro reg, RandomAccessFile file) throws IOException{
+        file.seek(4);
+		long pos;
+
+		while (file.getFilePointer() < file.length()) {
+            pos = file.getFilePointer();
+			byte lapide = file.readByte();
+			int tam_reg = file.readInt();
+			int reg_id = file.readInt();
+
+			if (lapide != 1 && reg_id == reg.getId()) {
+				return pos;
+			} else {
+				file.seek(file.getFilePointer() + tam_reg - 4);
+			}
+		}
+        return -1;
     }
 }
 
