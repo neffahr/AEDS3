@@ -839,6 +839,7 @@ class Registro {
 				file.seek(file.getFilePointer() + tam_reg - 4);
 			}
 		}
+        file.seek(0);
         return -1;
     }
 }

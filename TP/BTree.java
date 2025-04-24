@@ -7,6 +7,7 @@ import java.io.RandomAccessFile;
 public class BTree {
     protected int ordem;
     protected int nivel;
+    protected int min;
     public static final String INDEX_FILE = "./arqs/btree_index.bin";
 
     /*      PAGINA      */
@@ -71,6 +72,7 @@ public class BTree {
     public BTree (int ordem) {
         this.ordem = ordem;
         this.nivel = 0;
+        this.min = (int) Math.ceil(ordem / 2.0) - 1;
     }
 
     public int getOrdem(){
@@ -113,6 +115,12 @@ public class BTree {
             idxf.writeLong(8);
             raiz = 8;
         }
+        if (raiz == -1) {
+            idxf.seek(0);
+            idxf.writeLong(8);
+            raiz = 8;
+        }
+        
         idxf.seek(raiz);
         int nivel_local = 1;
 
@@ -160,6 +168,7 @@ public class BTree {
                     }
                     pag.regs.add(i, subiu);
                     pag.filhos.add(i + 1, subiu.end); // Insere ponteiro da nova pag criada
+                    pag.num_elem++;
                     subiu = null;
                 }
                 else {
@@ -178,6 +187,7 @@ public class BTree {
                 }
                 pag.regs.add(i, newreg);
                 pag.filhos.add(i + 1, (long) -1);
+                pag.num_elem++;
                 subiu = null;
             }
             else {
@@ -329,7 +339,11 @@ public class BTree {
         // Set da posição inicial (raiz) e do nivel inicial (1).
         // Se não tiver elementos retorna nulo
         long raiz = idxf.readLong();
-        if (raiz == -1) {return null;}
+        if (raiz == -1) {
+            dataf.close();
+            idxf.close();
+            return null;
+        }
         idxf.seek(raiz);
         int nivel_local = 1;
 
@@ -363,16 +377,16 @@ public class BTree {
         // Se já estiver no ultimo nivel pega intervalo de regs da pagina
         // Se acabar a pagina e ainda ter regs a serem buscados, passa para prox pagina
         else {
-            int end=0;
             for(ParIdEndereco reg : pag.regs) {
                 if (reg.id >= id_start && reg.id <= id_fim) {
-                    long pos_reg = pag.regs.get(end).end;
+                    long pos_reg = reg.end;
                     dataf.seek(pos_reg+5); // Pula lapide e tam_reg
                     regs.add(Registro.readIB(dataf));
                 }
             }
             if (pag.regs.get(pag.regs.size()-1).id < id_fim) {
                 pos = pag.filhos.get(pag.filhos.size()-1);
+                pag=null;
                 search(id_start, id_fim, regs, nivel, pos, dataf, idxf);
             }
             pag=null;
@@ -389,17 +403,21 @@ public class BTree {
         // Set da posição inicial (raiz) e do nivel inicial (1).
         // Se não tiver elementos retorna falso
         long raiz = idxf.readLong();
-        if (raiz == -1) {return false;}
+        if (raiz == -1) {
+            dataf.close();
+            idxf.close();
+            return false;
+        }
         idxf.seek(raiz);
         int nivel_local = 1;
 
-        boolean resp = update(newreg, nivel_local, raiz, dataf, idxf);
+        boolean resp = update(newreg, raiz, nivel_local, idxf, dataf);
         dataf.close();
         idxf.close();
         return resp;
     }
 
-    private boolean update(Registro newreg, int nivel, long pos, RandomAccessFile dataf, RandomAccessFile idxf) throws IOException{
+    private boolean update(Registro newreg, long pos, int nivel, RandomAccessFile idxf, RandomAccessFile dataf) throws IOException{
         // Carrega a pagina atual na memoria
         Pagina pag = new Pagina();
         pag.populate(pos, idxf);
@@ -415,16 +433,15 @@ public class BTree {
             }
             pos = pag.filhos.get(i);
             pag=null;
-            return update(newreg, nivel+1, pos, dataf, idxf);
+            return update(newreg, pos, nivel+1, idxf, dataf);
         }
 
         // Se já estiver no ultimo nivel, acha chave, pega end e atualiza
         // Se a atualização mover o registro para o final, atualiza end
         else {
-            int end=0;
             for(ParIdEndereco reg : pag.regs) {
                 if (reg.id == newreg.id) {
-                    long pos_reg = pag.regs.get(end).end;
+                    long pos_reg = reg.end;
                     dataf.seek(pos_reg+1);
                     int tam_reg = dataf.readInt();
 
@@ -432,25 +449,173 @@ public class BTree {
                         dataf.seek(pos_reg);
                         Registro.writeData(newreg, tam_reg, dataf);
                     } else {
-                        dataf.seek(pos);
+                        dataf.seek(pos_reg);
                         dataf.writeByte(1);
 
-                        pag.regs.get(end).end = dataf.length();
+                        reg.end = dataf.length();
                         writeData(pos, pag, idxf);
 
                         dataf.seek(dataf.length());
                         Registro.writeData(newreg, newreg.calcTamReg(), dataf);
                     }
+                    pag=null;
+                    return true;
                 }
             }
             pag=null;
-            return true;
+            return false;
         }
     }
 
     // DELETE
-    public boolean delete(int id) {
-        return true;
+    public boolean delete(int id) throws IOException {
+        RandomAccessFile idxf = new RandomAccessFile(INDEX_FILE, "rw");
+        RandomAccessFile dataf = new RandomAccessFile(Registro.DB_BINARIO, "rw");
+        idxf.seek(0);
+        dataf.seek(0);
+
+        // Set da posição inicial (raiz) e do nivel inicial (1).
+        // Se não tiver elementos retorna falso
+        long raiz = idxf.readLong();
+        if (raiz == -1) {
+            dataf.close();
+            idxf.close();
+            return false;
+        }
+        idxf.seek(raiz);
+        int nivel_local = 1;
+
+        boolean resp = delete(id, raiz, nivel_local, idxf, dataf);
+        dataf.close();
+        idxf.close();
+        return resp;
     };
+
+    private boolean delete(int id, long pos, int nivel, RandomAccessFile idxf, RandomAccessFile dataf) 
+    throws IOException{
+        // Carrega a pagina atual na memoria
+        Pagina pag = new Pagina();
+        pag.populate(pos, idxf);
+        int i=0;
+
+        // Avança na arvore até o ultimo nivel
+        if (nivel < this.nivel) {
+            for(ParIdEndereco reg : pag.regs) {
+                if (id < reg.id) {
+                    break;
+                }
+                i++;
+            }
+            pos = pag.filhos.get(i);
+            pag=null;
+            boolean resp = delete(id, pos, nivel+1, idxf, dataf);
+            return resp;
+        }
+        
+        else {
+            int idx=0;
+            for(ParIdEndereco reg : pag.regs) {
+                if (reg.id == id) {
+                    // Remove do arq de dados
+                    long pos_reg = reg.end;
+                    dataf.seek(pos_reg);
+                    dataf.writeByte(1);
+                    
+                    // remove do arq de indices
+                    pag.regs.remove(idx);
+                    pag.filhos.remove(idx);
+                    pag.num_elem--;
+                    writeData(pos, pag, idxf);
+
+                    // Reinicia arquivo se ficar vazio
+                    if (dataf.length() == 4) {
+                        idxf.setLength(0);
+                        idxf.writeLong(-1);
+                    }
+                    pag=null;
+                    return true;
+                }
+                idx++;
+            }
+            pag = null;
+            return false;
+        }
+    }
+
+    // private void merge(Pagina pag, long pos, long pai, RandomAccessFile idxf) 
+    // throws IOException {
+    //     if (pai == -1) return; // raiz
+
+    //     // Cerreg pai na memoria
+    //     Pagina pagpai = new Pagina();
+    //     pagpai.populate(pos, idxf);
+
+    //     int idxPag = pagpai.filhos.indexOf(pos);
+
+    //     // Acha posição da pagina irmã
+    //     // Se há um irmão a esquerda pega pos
+    //     // Se não houver irmão a esquerda pega pos da direita
+    //     long irmaoPos;
+    //     int irmaoIdx;
+    //     if (idxPag > 0) {
+    //         irmaoIdx = idxPag - 1;
+    //         irmaoPos = pagpai.filhos.get(irmaoIdx);
+    //     } 
+    //     else if (idxPag < pagpai.num_elem) { 
+    //         irmaoIdx = idxPag + 1;
+    //         irmaoPos = pagpai.filhos.get(irmaoIdx);
+    //     } else {
+    //         return; // sem irmão
+    //     }
+
+    //     // Carrega irmão na memoria
+    //     Pagina irmao = new Pagina();
+    //     irmao.populate(irmaoPos, idxf);
+
+    //     // Fundir registros da página atual com o irmão
+    //     if (idxPag < irmaoIdx) {
+    //         // pag à esquerda
+    //         pag.regs.addAll(irmao.regs);
+    //         pag.num_elem = pag.regs.size();
+
+    //         // reoganiza filhos
+    //         pag.filhos.remove(-1);
+    //         irmao.filhos.addAll(pag.filhos);
+
+    //         // remove ponteiro para o irmão do pai
+    //         pagpai.filhos.remove(irmaoIdx);
+    //         pagpai.regs.remove(idxPag);
+    //     } else {
+    //         // pag à direita
+    //         irmao.regs.addAll(pag.regs);
+    //         irmao.num_elem = irmao.regs.size();
+
+    //         // reoganiza filhos
+    //         irmao.filhos.remove(-1);
+    //         irmao.filhos.addAll(pag.filhos);
+
+    //         pagpai.filhos.remove(idxPag);
+    //         pagpai.regs.remove(irmaoIdx);
+    //     }
+
+    //     // salva página fundida no lugar da que foi mantida
+    //     if (idxPag < irmaoIdx) {
+    //         writeData(pos, pag, idxf);
+    //     } else {
+    //         writeData(irmaoPos, irmao, idxf);
+    //     }
+
+    //     // salvar pai atualizado
+    //     pagpai.num_elem--;
+    //     if (pagpai.num_elem == 0 && pai == 0) {
+    //         // Se a raiz ficou sem chaves, ajusta raiz
+    //         // Só uma página existe agora: pag ou irmão
+    //     } else if (pagpai.num_elem < min) {
+    //         // Recursivamente funde o pai se necessário
+    //         merge(pagpai, pai, idxf);
+    //     } else {
+    //         writeData(pai, pagpai, idxf);
+    //     }
+    // }
 }
 

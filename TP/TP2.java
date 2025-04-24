@@ -3,9 +3,6 @@ import java.time.LocalDate;
 import java.util.*;
 
 public class TP2 {
-    public static final String HASH_BUCKETS = "./arqs/hash_buckets.bin";
-    public static final String HASH_DIRETORIO = "./arqs/hash_diretorio.bin";
-    public static final String HASH_METADADOS = "./arqs/hash_meta.bin";
     private static enum EstruturaDados {
         NENHUMA,
         ARVORE_B,
@@ -18,7 +15,11 @@ public class TP2 {
     public static void main(String[] args) throws Exception {
         Scanner scanner = new Scanner(System.in);
         int opcao;
-        boolean dadosCarregados = false;
+        boolean dadosCarregados = true;
+        
+        RandomAccessFile raf = new RandomAccessFile(Registro.DB_BINARIO, "rw");
+        if (raf.length() == 0) {dadosCarregados = false;}
+        raf.close();
 
         do {
             if (!dadosCarregados) {
@@ -72,7 +73,7 @@ public class TP2 {
                     case 3:
                         estruturaAtual = EstruturaDados.LISTA_INVERTIDA;
                         System.out.println("Estrutura de dados selecionada: Lista Invertida");
-                        inicializarListaInvertida();
+                        inicializarListaInvertida(scanner);
                         break;
                     case 0:
                         System.out.println("Saindo...");
@@ -129,11 +130,11 @@ public class TP2 {
         }
     }
     
-    private static void inicializarListaInvertida() {
+    private static void inicializarListaInvertida(Scanner scanner) {
         try {
             // Código para inicializar a lista invertida
             System.out.println("Inicializando Lista Invertida...");
-            // ListaInvertida.inicializar();
+            menuListaInvertida(scanner);
         } catch (Exception e) {
             System.out.println("Erro ao inicializar Lista Invertida: " + e.getMessage());
         }
@@ -167,8 +168,8 @@ public class TP2 {
                     System.out.println("Busca implementada para Árvore B.");
                     break;
                 case 3:
-                    Registro regAtualizado = inputReg(scanner);
-                    // boolean resultAtualizacao = ArvoreB.atualizar(regAtualizado);
+                    Registro newreg = inputReg(scanner);
+                    // boolean resultAtualizacao = ArvoreB.atualizar(newreg);
                     // System.out.println(resultAtualizacao ? "Registro atualizado com sucesso." : "Erro ao atualizar. Registro não existe.");
                     System.out.println("Atualização implementada para Árvore B.");
                     break;
@@ -198,8 +199,8 @@ public class TP2 {
         int capBucket;
         IdxHash idx;
 
-        if (new File(HASH_METADADOS).exists()) {
-            DataInputStream dis = new DataInputStream(new FileInputStream(new File(HASH_METADADOS)));
+        if (new File(IdxHash.HASH_METADADOS).exists()) {
+            DataInputStream dis = new DataInputStream(new FileInputStream(new File(IdxHash.HASH_METADADOS)));
             capBucket = dis.readInt();
             idx = new IdxHash(capBucket);
         } else {
@@ -207,7 +208,7 @@ public class TP2 {
             System.out.print("Escolha a capacidade de um bucket: ");
             capBucket = scanner.nextInt();
             scanner.nextLine();
-            new DataOutputStream(new FileOutputStream(new File(HASH_METADADOS))).writeInt(capBucket);
+            new DataOutputStream(new FileOutputStream(new File(IdxHash.HASH_METADADOS))).writeInt(capBucket);
             idx = new IdxHash(capBucket);
             idx.loadHash();
         }
@@ -236,7 +237,7 @@ public class TP2 {
                     file_create.close();
                     break;
                 case 2:
-                    System.out.print("ID do registro: ");
+                    System.out.print("ID: ");
                     int id = scanner.nextInt();
                     pos = idx.read(id);
                     if (pos < 0)
@@ -250,16 +251,10 @@ public class TP2 {
                     System.out.println("Busca por ID implementada para Hash.");
                     break;
                 case 3:
-                    System.out.print("ID do registro: ");
-                    id = scanner.nextInt();
-                    Registro regAtualizado = inputReg(scanner);
+                    Registro newreg = inputReg(scanner);
                     pos = Registro.getLength();
-
-                    if (Registro.update(regAtualizado)) {
-                        idx.delete(id);
-                        idx.create(id, pos);
-                    }
-
+                    Registro.update(newreg);
+                    
                     System.out.println("Atualização implementada para Hash.");
                     break;
                 case 4:
@@ -284,44 +279,78 @@ public class TP2 {
         return opcao;
     }
     
-    private static int menuListaInvertida(Scanner scanner) {
+    private static int menuListaInvertida(Scanner scanner) throws Exception {
+        ListaInvertida lista;
+        RandomAccessFile file = new RandomAccessFile(Registro.DB_BINARIO, "rw");
+
+        if (!(new File(ListaInvertida.LIST_DICIONARIO).exists())) {
+            lista = new ListaInvertida(100);
+            lista.loadList();
+        } else {lista = new ListaInvertida(100);}
+        
         System.out.println("\n=== MENU LISTA INVERTIDA ===");
         System.out.println("1 - Criar registro");
-        System.out.println("2 - Buscar registro por ID");
+        System.out.println("2 - Buscar registro por título");
         System.out.println("3 - Atualizar registro");
         System.out.println("4 - Deletar registro");
         System.out.println("5 - Voltar ao menu de estruturas");
-        System.out.println("0 - Sair");
+        System.out.println("0 - Sair"); 
         System.out.print("Escolha uma opção: ");
         
         int opcao = scanner.nextInt();
         scanner.nextLine();
         
         try {
+            long pos;
+            Registro reg;
             switch (opcao) {
                 case 1:
-                    Registro reg = inputReg(scanner);
-                    // ListaInvertida.inserir(reg);
-                    System.out.println("Registro criado com sucesso na Lista Invertida.");
+                    reg = inputReg(scanner);
+                    pos = file.length();
+                    Registro.create(reg, file);
+
+                    if (lista.create(reg, pos)) 
+                        System.out.println("Registro criado com sucesso na Lista Invertida.");
+                    else 
+                        System.out.println("Falha em criar. Registro já existe");
                     break;
+
                 case 2:
-                    System.out.print("ID do registro: ");
-                    int id = scanner.nextInt();
-                    // Registro resultado = ListaInvertida.buscarPorId(id);
-                    // System.out.println(resultado != null ? resultado : "Registro não encontrado.");
-                    System.out.println("Busca por ID implementada para Lista Invertida.");
+                    System.out.print("Título do registro: ");
+                    String title_read = scanner.nextLine();
+                    reg = lista.read(title_read);
+
+                    if (reg == null)
+                        System.out.println("Elemento não encontrado");
+                    else {
+                        System.out.println(reg);
+                        System.out.println("Busca implementada para Lista Invertida.");
+                    }
                     break;
+
                 case 3:
-                    Registro regAtualizado = inputReg(scanner);
-                    // boolean resultAtualizacao = ListaInvertida.atualizar(regAtualizado);
-                    // System.out.println(resultAtualizacao ? "Registro atualizado com sucesso." : "Erro ao atualizar. Registro não existe.");
-                    System.out.println("Atualização implementada para Lista Invertida.");
+                    System.out.println("Título a ser atualizado: ");
+                    String title_up = scanner.nextLine();
+                    Registro newreg = inputReg(scanner);
+
+                    if (!Registro.update(newreg)) { System.out.println("Registro não encontrado");}
+                    else {
+                        int tam = lista.read(title_up).calcTamReg();
+                        lista.delete(title_up);
+                        if (newreg.calcTamReg() <= tam) {
+                            lista.create(newreg, Registro.getPos(newreg, file));
+                        }
+                        else {lista.create(newreg, file.length());}
+                        System.out.println("Registro atualizado com sucesso.");
+                    }
                     break;
+
                 case 4:
-                    System.out.print("ID do registro a ser deletado: ");
-                    int idDel = scanner.nextInt();
-                    // boolean resultDelecao = ListaInvertida.deletar(idDel);
-                    // System.out.println(resultDelecao ? "Registro deletado com sucesso." : "Erro ao deletar. Registro não existe.");
+                    System.out.print("Nome do registro a ser deletado: ");
+                    String title_del = scanner.nextLine();
+                    Registro.delete(lista.read(title_del).getId());
+                    lista.delete(title_del);
+                    System.out.println("Registro deletado com sucesso.");
                     System.out.println("Deleção implementada para Lista Invertida.");
                     break;
                 case 5:
@@ -337,18 +366,6 @@ public class TP2 {
         }
         
         return opcao;
-    }
-    
-    private static void exibirResultados(List<Registro> resultados) {
-        if (resultados == null || resultados.isEmpty()) {
-            System.out.println("Nenhum registro encontrado.");
-            return;
-        }
-        
-        System.out.println("Registros encontrados: " + resultados.size());
-        for (Registro reg : resultados) {
-            System.out.println(reg);
-        }
     }
 
     private static Registro inputReg(Scanner scanner) {
