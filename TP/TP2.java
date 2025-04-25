@@ -63,7 +63,7 @@ public class TP2 {
                     case 1:
                         estruturaAtual = EstruturaDados.ARVORE_B;
                         System.out.println("Estrutura de dados selecionada: Árvore B");
-                        inicializarArvoreB();
+                        inicializarArvoreB(scanner);
                         break;
                     case 2:
                         estruturaAtual = EstruturaDados.HASH;
@@ -108,13 +108,11 @@ public class TP2 {
         scanner.close();
     }
     
-    private static void inicializarArvoreB() {
+    private static void inicializarArvoreB(Scanner scanner) {
         try {
             // Código para inicializar a estrutura de árvore B
             System.out.println("Inicializando estrutura de Árvore B...");
-            // ArvoreB.inicializar();
-            // TO DO: inicializar arquivo
-            // TO DO: tacar menu
+            menuArvoreB(scanner);
         } catch (Exception e) {
             System.out.println("Erro ao inicializar Árvore B: " + e.getMessage());
         }
@@ -140,13 +138,38 @@ public class TP2 {
         }
     }
     
-    private static int menuArvoreB(Scanner scanner) {
+    private static int menuArvoreB(Scanner scanner) throws Exception {
+        int ordem;
+        Btree arvb;
+
+        if (new File(Btree.INDEX_FILE).exists()) {
+            DataInputStream dis = new DataInputStream(new FileInputStream(new File(Btree.METADADOS_FILE)));
+            ordem = dis.readInt();
+            arvb = new Btree(ordem);
+            dis.close();
+        } else {
+            RandomAccessFile meta = new RandomAccessFile(Btree.METADADOS_FILE, "rw");
+            System.out.println("\n=== INICIALIZAÇÃO ===");
+            System.out.print("Ordem da Arvore B+: ");
+            ordem = scanner.nextInt();
+            scanner.nextLine();
+            arvb = new Btree(ordem);
+
+            meta.seek(0);
+            meta.writeInt(ordem);
+            meta.close();
+
+            // arvb.loadBtree();
+
+        }
+
         System.out.println("\n=== MENU ÁRVORE B ===");
         System.out.println("1 - Criar registro");
         System.out.println("2 - Buscar registro por ID");
-        System.out.println("3 - Atualizar registro");
-        System.out.println("4 - Deletar registro");
-        System.out.println("5 - Voltar ao menu de estruturas");
+        System.out.println("3 - Buscar lista de registros por ID");
+        System.out.println("4 - Atualizar registro");
+        System.out.println("5 - Deletar registro");
+        System.out.println("6 - Voltar ao menu de estruturas");
         System.out.println("0 - Sair");
         System.out.print("Escolha uma opção: ");
         
@@ -156,31 +179,54 @@ public class TP2 {
         try {
             switch (opcao) {
                 case 1:
-                    Registro reg = inputReg(scanner);
-                    // ArvoreB.inserir(reg);
+                    RandomAccessFile dataf = new RandomAccessFile(Registro.DB_BINARIO, "rw");
+                    Registro reg_create = inputReg(scanner);
+
+                    Registro.create(reg_create, dataf); // Inserção no arquivo de dados
+                    arvb.create(reg_create, dataf);
+
                     System.out.println("Registro criado com sucesso na Árvore B.");
+                    dataf.close();
                     break;
+
                 case 2:
                     System.out.print("ID do registro: ");
                     int id = scanner.nextInt();
-                    // Registro resultado = ArvoreB.buscar(id);
-                    // System.out.println(resultado != null ? resultado : "Registro não encontrado.");
-                    System.out.println("Busca implementada para Árvore B.");
+
+                    Registro reg_read = arvb.read(id);
+                    if(reg_read == null) {System.out.println("Registro não encontrado");} 
+                    else {System.out.println(reg_read);}
                     break;
+
                 case 3:
-                    Registro newreg = inputReg(scanner);
-                    // boolean resultAtualizacao = ArvoreB.atualizar(newreg);
-                    // System.out.println(resultAtualizacao ? "Registro atualizado com sucesso." : "Erro ao atualizar. Registro não existe.");
-                    System.out.println("Atualização implementada para Árvore B.");
+                    System.out.print("ID inicial: ");
+                    int id_init = scanner.nextInt();
+                    System.out.print("ID final: ");
+                    int id_fim = scanner.nextInt();
+
+                    ArrayList<Registro> regs = arvb.search(id_init, id_fim);
+                    if (regs == null) {System.out.println("Registros não encontrados");}
+                    else {
+                        for (Registro reg : regs) {System.out.println(reg);}
+                    }
                     break;
+
                 case 4:
-                    System.out.print("ID do registro a ser deletado: ");
-                    int idDel = scanner.nextInt();
-                    // boolean resultDelecao = ArvoreB.deletar(idDel);
-                    // System.out.println(resultDelecao ? "Registro deletado com sucesso." : "Erro ao deletar. Registro não existe.");
-                    System.out.println("Deleção implementada para Árvore B.");
+                    Registro newreg = inputReg(scanner);
+                    if(!arvb.update(newreg)) {System.out.println("Registro não encontrado");}
+                    else {System.out.println("Registro atualizado com sucesso");}
                     break;
+
                 case 5:
+                    System.out.print("ID do registro a ser deletado: ");
+                    int id_del = scanner.nextInt();
+
+                    if(!arvb.delete(id_del)) {System.out.println("Registro não encontrado");}
+                    else {System.out.println("Registro atualizado com sucesso");}
+
+                    break;
+
+                case 6:
                     return -1;
                 case 0:
                     return 0;
@@ -191,7 +237,6 @@ public class TP2 {
         } catch (Exception e) {
             System.out.println("Erro ao executar a operação: " + e.getMessage());
         }
-        
         return opcao;
     }
     
