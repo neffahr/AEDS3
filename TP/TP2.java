@@ -222,7 +222,7 @@ public class TP2 {
                     int id_del = scanner.nextInt();
 
                     if(!arvb.delete(id_del)) {System.out.println("Registro não encontrado");}
-                    else {System.out.println("Registro atualizado com sucesso");}
+                    else {System.out.println("Registro deletado com sucesso");}
 
                     break;
 
