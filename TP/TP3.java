@@ -6,18 +6,21 @@ public class TP3 {
         Scanner scanner = new Scanner(System.in);
         int opcao;
 
-        do {
+       do {
             System.out.println("\n=== MENU PRINCIPAL ===");
             System.out.println("1 - Carregar dados");
-            System.out.println("2 - Compactar arquivo");
-            System.out.println("3 - Descompactar arquivo");
+            System.out.println("2 - Compactar arquivo (Huffman & LZW)");
+            System.out.println("3 - Descompactar arquivo (Huffman & LZW)");
             System.out.println("4 - Procurar padrão (KMP)");
             System.out.println("5 - Procurar padrão (BM)");
             System.out.println("0 - Sair");
             System.out.print("Escolha uma opção: ");
-
-            opcao = scanner.nextInt();
-            scanner.nextLine(); 
+            String entrada = scanner.nextLine();
+            try {
+                opcao = Integer.parseInt(entrada);
+            } catch (NumberFormatException e) {
+                opcao = -1;
+            }
 
             try {
                 switch (opcao) {
@@ -27,19 +30,90 @@ public class TP3 {
                         break;
 
                     case 2:
-                        // Compressão Huffman + LZW
+                        System.out.print("Digite a versão da compressão (ex: 1): ");
+                        String versaoLZW = scanner.nextLine();
+                        String nomeEntrada = Registro.DB_BINARIO;
+                        String nomeSaidaLZW = "registrosLZWCompressao" + versaoLZW + ".bin";
+                        String nomeSaidaHuffman = "registrosHuffmanCompressao" + versaoLZW + ".bin";
+
+                        byte[] dados = lerArquivo(nomeEntrada);
+                        //Compressao LZW
+                        long inicioCompLZW = System.currentTimeMillis();
+                        byte[] comprimidoLZW = LZW.compressao(dados);
+                        long fimCompLZW = System.currentTimeMillis();
+                        escreverArquivo(nomeSaidaLZW, comprimidoLZW);
+
+                        // Compressao Huffman
+                        long inicioCompHuffman = System.currentTimeMillis();
+                        HashMap<Byte, String> codigoscomp = Huffman.getHuffmanHash(dados);
+                        byte[] comprimidoHuffman = Huffman.comprimir(dados, codigoscomp);
+                        long fimCompHuffman = System.currentTimeMillis();
+                        escreverArquivo(nomeSaidaLZW, comprimidoHuffman);
+
+                        double ganhoLZW = 100.0 * (1.0 - ((double)comprimidoLZW.length / dados.length));
+                        System.out.printf("Arquivo compactado (LZW) salvo como: %s\n", nomeSaidaLZW);
+                        System.out.printf("Tempo de execução: %.2f ms\n", (fimCompLZW - inicioCompLZW) * 1.0);
+                        System.out.printf("Ganho de compressão: %.2f%%\n", ganhoLZW);
+
+                        double ganhoHuffman = 100.0 * (1.0 - ((double)comprimidoHuffman.length / dados.length));
+                        System.out.printf("Arquivo compactado (Huffman) salvo como: %s\n", nomeSaidaHuffman);
+                        System.out.printf("Tempo de execução: %.2f ms\n", (fimCompHuffman - inicioCompHuffman) * 1.0);
+                        System.out.printf("Ganho de compressão: %.2f%%\n", ganhoHuffman);
+                        
                         break;
 
                     case 3:
-                        // Descompressão Huffman + LZW
-                        break;
+                        System.out.print("Digite a versão da compressão (ex: 1): ");
+                        String versaoDescompLZW = scanner.nextLine();
+                        String nomeCompLZW = "registrosLZWCompressao" + versaoDescompLZW + ".bin";
+                        String nomeCompHuffman = "registrosLZWCompressao" + versaoDescompLZW + ".bin";
+                        byte[] dadosCompLZW = lerArquivo(nomeCompLZW);
+                        byte[] dadosCompHuffman = lerArquivo(nomeCompHuffman);
 
-                    case 4:
-                        // Casamento de Padrão por KMP
+                        //Descompressao LZW
+                        long inicioDescompLZW = System.currentTimeMillis();
+                        byte[] descomprimidoLZW = LZW.descompressao(dadosCompLZW);
+                        long fimDescompLZW = System.currentTimeMillis();
+                        escreverArquivo(Registro.DB_BINARIO, descomprimidoLZW);
+
+                        //Descompressao Huffman
+                        long inicioDescompHuffman = System.currentTimeMillis();
+                        HashMap<Byte, String> codigosdescomp = Huffman.getHuffmanHash(dadosCompHuffman);
+                        byte[] descomprimidoHuffman = Huffman.decodificar(dadosCompHuffman, codigosdescomp);
+                        long fimDescompHuffman = System.currentTimeMillis();
+                        escreverArquivo("registros2.bin", descomprimidoLZW);
+                        
+                        System.out.printf("Tempo de execução (LZW): %.2f ms\n", (fimDescompLZW - inicioDescompLZW) * 1.0);
+                        double perdaLZW = 100.0 * (1.0 - ((double)dadosCompLZW.length / descomprimidoLZW.length));
+                        System.out.printf("Perda de compressão: %.2f%%\n", perdaLZW);
+
+                        System.out.printf("Tempo de execução: %.2f ms\n", (fimDescompHuffman - inicioDescompHuffman) * 1.0);
+                        double perdaHuffman = 100.0 * (1.0 - ((double)dadosCompHuffman.length / descomprimidoHuffman.length));
+                        System.out.printf("Perda de compressão: %.2f%%\n", perdaHuffman);
                         break;
+                    
+                    case 4:
+                        //Busca KMP
 
                     case 5:
-                        // Casamento de padrão por Boyer Moore
+                        //Busca Boyer-Moore
+                        System.out.print("Digite o nome do arquivo para busca: ");
+                        String arquivoBusca = scanner.nextLine();
+                        System.out.print("Digite o padrão a ser buscado: ");
+                        String padrao = scanner.nextLine();
+
+                        byte[] textoBusca = lerArquivo(arquivoBusca);
+                        byte[] padraoBusca = padrao.getBytes();
+                        long inicioBusca = System.currentTimeMillis();
+                        List<Integer> posicoes = BM.buscarPadrao(textoBusca, padraoBusca);
+                        long fimBusca = System.currentTimeMillis();
+
+                        if (posicoes.isEmpty()) {
+                            System.out.println("Padrão não encontrado.");
+                        } else {
+                            System.out.println("Padrão encontrado nas posições: " + posicoes);
+                        }
+                        System.out.printf("Tempo de execução: %.2f ms\n", (fimBusca - inicioBusca) * 1.0);
                         break;
 
                     case 0:
@@ -56,5 +130,22 @@ public class TP3 {
         } while (opcao != 0);
 
         scanner.close();
+    }
+
+    // Função utilitária para ler arquivo binário
+    private static byte[] lerArquivo(String nomeArquivo) throws IOException {
+        File file = new File(nomeArquivo);
+        byte[] data = new byte[(int) file.length()];
+        try (FileInputStream fis = new FileInputStream(file)) {
+            fis.read(data);
+        }
+        return data;
+    }
+
+    // Função utilitária para escrever arquivo binário
+    private static void escreverArquivo(String nomeArquivo, byte[] dados) throws IOException {
+        try (FileOutputStream fos = new FileOutputStream(nomeArquivo)) {
+            fos.write(dados);
+        }
     }
 }
