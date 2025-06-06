@@ -23,6 +23,9 @@ public class TP3 {
             }
 
             try {
+                HashMap<Byte, String> codigos;
+                byte[] dados;
+
                 switch (opcao) {
                     case 1:
                         Registro.loadData();
@@ -32,11 +35,10 @@ public class TP3 {
                     case 2:
                         System.out.print("Digite a versão da compressão (ex: 1): ");
                         String versaoLZW = scanner.nextLine();
-                        String nomeEntrada = Registro.DB_BINARIO;
                         String nomeSaidaLZW = "registrosLZWCompressao" + versaoLZW + ".bin";
                         String nomeSaidaHuffman = "registrosHuffmanCompressao" + versaoLZW + ".bin";
-
-                        byte[] dados = lerArquivo(nomeEntrada);
+                        dados = lerArquivo(Registro.DB_BINARIO);
+                        
                         //Compressao LZW
                         long inicioCompLZW = System.currentTimeMillis();
                         byte[] comprimidoLZW = LZW.compressao(dados);
@@ -45,8 +47,8 @@ public class TP3 {
 
                         // Compressao Huffman
                         long inicioCompHuffman = System.currentTimeMillis();
-                        HashMap<Byte, String> codigoscomp = Huffman.getHuffmanHash(dados);
-                        byte[] comprimidoHuffman = Huffman.comprimir(dados, codigoscomp);
+                        codigos = Huffman.getHuffmanHash(dados);
+                        byte[] comprimidoHuffman = Huffman.comprimir(dados, codigos);
                         long fimCompHuffman = System.currentTimeMillis();
                         escreverArquivo(nomeSaidaLZW, comprimidoHuffman);
 
@@ -69,6 +71,7 @@ public class TP3 {
                         String nomeCompHuffman = "registrosLZWCompressao" + versaoDescompLZW + ".bin";
                         byte[] dadosCompLZW = lerArquivo(nomeCompLZW);
                         byte[] dadosCompHuffman = lerArquivo(nomeCompHuffman);
+                        dados = lerArquivo(Registro.DB_BINARIO);
 
                         //Descompressao LZW
                         long inicioDescompLZW = System.currentTimeMillis();
@@ -78,8 +81,8 @@ public class TP3 {
 
                         //Descompressao Huffman
                         long inicioDescompHuffman = System.currentTimeMillis();
-                        HashMap<Byte, String> codigosdescomp = Huffman.getHuffmanHash(dadosCompHuffman);
-                        byte[] descomprimidoHuffman = Huffman.decodificar(dadosCompHuffman, codigosdescomp);
+                        codigos = Huffman.getHuffmanHash(dados);
+                        byte[] descomprimidoHuffman = Huffman.decodificar(dadosCompHuffman, codigos);
                         long fimDescompHuffman = System.currentTimeMillis();
                         escreverArquivo("registros2.bin", descomprimidoLZW);
                         
@@ -94,26 +97,44 @@ public class TP3 {
                     
                     case 4:
                         //Busca KMP
+                        System.out.print("Digite o nome do arquivo para busca: ");
+                        String arquivoKMP = scanner.nextLine();
+                        System.out.print("Digite o padrão a ser buscado: ");
+                        String textpadraoKMP = scanner.nextLine();
+
+                        byte[] textoKMP = lerArquivo(arquivoKMP);
+                        byte[] padraoKMP = textpadraoKMP.getBytes();
+                        long inicioKMP = System.currentTimeMillis();
+                        List<Integer> posicoesKMP = KMP.buscarPadrao(textoKMP, padraoKMP);
+                        long fimKMP = System.currentTimeMillis();
+
+                        if (posicoesKMP.isEmpty()) {
+                            System.out.println("Padrão não encontrado.");
+                        } else {
+                            System.out.println("Padrão encontrado nas posições: " + posicoesKMP);
+                        }
+                        System.out.printf("Tempo de execução: %.2f ms\n", (fimKMP - inicioKMP) * 1.0);
+                        break;
 
                     case 5:
                         //Busca Boyer-Moore
                         System.out.print("Digite o nome do arquivo para busca: ");
-                        String arquivoBusca = scanner.nextLine();
+                        String arquivoBM = scanner.nextLine();
                         System.out.print("Digite o padrão a ser buscado: ");
-                        String padrao = scanner.nextLine();
+                        String textpadraoBM = scanner.nextLine();
 
-                        byte[] textoBusca = lerArquivo(arquivoBusca);
-                        byte[] padraoBusca = padrao.getBytes();
-                        long inicioBusca = System.currentTimeMillis();
-                        List<Integer> posicoes = BM.buscarPadrao(textoBusca, padraoBusca);
-                        long fimBusca = System.currentTimeMillis();
+                        byte[] textoBuscaBM = lerArquivo(arquivoBM);
+                        byte[] padraoBM = textpadraoBM.getBytes();
+                        long inicioBM = System.currentTimeMillis();
+                        List<Integer> posicoesBM = BM.buscarPadrao(textoBuscaBM, padraoBM);
+                        long fimBM = System.currentTimeMillis();
 
-                        if (posicoes.isEmpty()) {
+                        if (posicoesBM.isEmpty()) {
                             System.out.println("Padrão não encontrado.");
                         } else {
-                            System.out.println("Padrão encontrado nas posições: " + posicoes);
+                            System.out.println("Padrão encontrado nas posições: " + posicoesBM);
                         }
-                        System.out.printf("Tempo de execução: %.2f ms\n", (fimBusca - inicioBusca) * 1.0);
+                        System.out.printf("Tempo de execução: %.2f ms\n", (fimBM - inicioBM) * 1.0);
                         break;
 
                     case 0:
