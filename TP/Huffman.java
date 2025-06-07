@@ -1,4 +1,5 @@
 import java.io.ByteArrayOutputStream;
+import java.io.RandomAccessFile;
 import java.util.HashMap;
 import java.util.PriorityQueue;
 
@@ -40,7 +41,7 @@ public class Huffman {
         return tamanho;
     }
 
-    public static HashMap<Byte, String> getHuffmanHash(byte[] sequencia) {
+    public static HashMap<Byte, String> getHuffmanHash(byte[] sequencia, int versao) throws java.io.IOException {
         HashMap<Byte, Integer> freqMap = new HashMap<>();
         for (byte c : sequencia) {
             freqMap.put(c, freqMap.getOrDefault(c, 0) + 1);
@@ -65,8 +66,45 @@ public class Huffman {
         HuffmanNode raiz = pq.poll();
         HashMap<Byte, String> codigos = new HashMap<>();
         constroiCodigos(raiz, "", codigos);
+        salvarArv(raiz, versao, getInputBitLength(sequencia, codigos));
 
         return codigos;
+    }
+
+    public static void salvarArv(HuffmanNode raiz, int versao, long bitsValidos) throws java.io.IOException {
+        try (java.io.DataOutputStream out = new java.io.DataOutputStream(new java.io.FileOutputStream("./arqs/ArvHuffman" + versao + ".bin"))) {
+            out.writeLong(bitsValidos); // Escreve a quantidade de bits válidos no início
+            salvarArv(raiz, out);
+        }
+    }
+
+    private static void salvarArv(HuffmanNode no, java.io.DataOutputStream out) throws java.io.IOException {
+        if (no == null) {
+            out.writeByte(0); // nó nulo
+            return;
+        }
+        if (no.esq == null && no.dir == null) {
+            out.writeByte(1); // folha
+            out.writeByte(no.b);
+        } else {
+            out.writeByte(2); // nó interno
+            salvarArv(no.esq, out);
+            salvarArv(no.dir, out);
+        }
+    }
+
+    public static HuffmanNode lerArv(RandomAccessFile in) throws java.io.IOException {
+        int tipo = in.readByte();
+        if (tipo == 0) return null; // nó nulo
+        if (tipo == 1) { // folha
+            byte b = in.readByte();
+            return new HuffmanNode(b, 0);
+        }
+        // tipo == 2, nó interno
+        HuffmanNode no = new HuffmanNode((byte)0, 0);
+        no.esq = lerArv(in);
+        no.dir = lerArv(in);
+        return no;
     }
 
     private static void constroiCodigos(HuffmanNode no, String codigo, HashMap<Byte, String> codigos) {
@@ -100,24 +138,17 @@ public class Huffman {
     }    
 
     // Versão buscando na tabela de códigos.
-    public static byte[] decodificar(byte[] sequencia, HashMap<Byte, String> codigos) {
+    public static byte[] decodificar(byte[] sequencia, HuffmanNode raiz, long bitsValidos) {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        StringBuilder codigoAtual = new StringBuilder();
-        HashMap<String, Byte> codigoParaByte = new HashMap<>();
-        for (byte b : codigos.keySet()) {
-            codigoParaByte.put(codigos.get(b), b);
-        }
-
-        for (int i = 0; i < getInputBitLength(sequencia, codigos); i++) {
+        HuffmanNode atual = raiz;
+        for (int i = 0; i < bitsValidos; i++) {
             int byteIndex = i / 8;
             int bitIndex = 7 - (i % 8);
             boolean bit = ((sequencia[byteIndex] >> bitIndex) & 1) == 1;
-            codigoAtual.append(bit ? '1' : '0');
-
-            Byte b = codigoParaByte.get(codigoAtual.toString());
-            if (b != null) {
-                output.write(b);
-                codigoAtual.setLength(0);
+            atual = bit ? atual.dir : atual.esq;
+            if (atual.esq == null && atual.dir == null) { // folha
+                output.write(atual.b);
+                atual = raiz;
             }
         }
         return output.toByteArray();

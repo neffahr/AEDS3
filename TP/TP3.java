@@ -34,9 +34,9 @@ public class TP3 {
 
                     case 2:
                         System.out.print("Digite a versão da compressão (ex: 1): ");
-                        String versaoLZW = scanner.nextLine();
-                        String nomeSaidaLZW = "registrosLZWCompressao" + versaoLZW + ".bin";
-                        String nomeSaidaHuffman = "registrosHuffmanCompressao" + versaoLZW + ".bin";
+                        String versaoComp = scanner.nextLine();
+                        String nomeSaidaLZW = "./arqs/registrosLZWCompressao" + versaoComp + ".bin";
+                        String nomeSaidaHuffman = "./arqs/registrosHuffmanCompressao" + versaoComp + ".bin";
                         dados = lerArquivo(Registro.DB_BINARIO);
                         
                         //Compressao LZW
@@ -47,10 +47,10 @@ public class TP3 {
 
                         // Compressao Huffman
                         long inicioCompHuffman = System.currentTimeMillis();
-                        codigos = Huffman.getHuffmanHash(dados);
+                        codigos = Huffman.getHuffmanHash(dados, Integer.parseInt(versaoComp));
                         byte[] comprimidoHuffman = Huffman.comprimir(dados, codigos);
                         long fimCompHuffman = System.currentTimeMillis();
-                        escreverArquivo(nomeSaidaLZW, comprimidoHuffman);
+                        escreverArquivo(nomeSaidaHuffman, comprimidoHuffman);
 
                         double ganhoLZW = 100.0 * (1.0 - ((double)comprimidoLZW.length / dados.length));
                         System.out.printf("Arquivo compactado (LZW) salvo como: %s\n", nomeSaidaLZW);
@@ -66,9 +66,9 @@ public class TP3 {
 
                     case 3:
                         System.out.print("Digite a versão da compressão (ex: 1): ");
-                        String versaoDescompLZW = scanner.nextLine();
-                        String nomeCompLZW = "registrosLZWCompressao" + versaoDescompLZW + ".bin";
-                        String nomeCompHuffman = "registrosLZWCompressao" + versaoDescompLZW + ".bin";
+                        String versaoDescomp = scanner.nextLine();
+                        String nomeCompLZW = "./arqs/registrosLZWCompressao" + versaoDescomp + ".bin";
+                        String nomeCompHuffman = "./arqs/registrosLZWCompressao" + versaoDescomp + ".bin";
                         byte[] dadosCompLZW = lerArquivo(nomeCompLZW);
                         byte[] dadosCompHuffman = lerArquivo(nomeCompHuffman);
                         dados = lerArquivo(Registro.DB_BINARIO);
@@ -81,10 +81,14 @@ public class TP3 {
 
                         //Descompressao Huffman
                         long inicioDescompHuffman = System.currentTimeMillis();
-                        codigos = Huffman.getHuffmanHash(dados);
-                        byte[] descomprimidoHuffman = Huffman.decodificar(dadosCompHuffman, codigos);
+
+                        java.io.RandomAccessFile raf = new java.io.RandomAccessFile("./arqs/ArvHuffman" + versaoDescomp + ".bin", "r");
+                        long bitsValidos = raf.readLong(); // lê os 8 primeiros bytes
+                        HuffmanNode arv = Huffman.lerArv(raf);
+                        
+                        byte[] descomprimidoHuffman = Huffman.decodificar(dadosCompHuffman, arv, bitsValidos);
                         long fimDescompHuffman = System.currentTimeMillis();
-                        escreverArquivo("registros2.bin", descomprimidoLZW);
+                        escreverArquivo("./arqs/registros2.bin", descomprimidoLZW);
                         
                         System.out.printf("Tempo de execução (LZW): %.2f ms\n", (fimDescompLZW - inicioDescompLZW) * 1.0);
                         double perdaLZW = 100.0 * (1.0 - ((double)dadosCompLZW.length / descomprimidoLZW.length));
@@ -98,7 +102,7 @@ public class TP3 {
                     case 4:
                         //Busca KMP
                         System.out.print("Digite o nome do arquivo para busca: ");
-                        String arquivoKMP = scanner.nextLine();
+                        String arquivoKMP = "./arqs/" + scanner.nextLine();
                         System.out.print("Digite o padrão a ser buscado: ");
                         String textpadraoKMP = scanner.nextLine();
 
@@ -119,7 +123,7 @@ public class TP3 {
                     case 5:
                         //Busca Boyer-Moore
                         System.out.print("Digite o nome do arquivo para busca: ");
-                        String arquivoBM = scanner.nextLine();
+                        String arquivoBM = "./arqs/" + scanner.nextLine();
                         System.out.print("Digite o padrão a ser buscado: ");
                         String textpadraoBM = scanner.nextLine();
 
