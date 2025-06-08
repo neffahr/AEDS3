@@ -20,16 +20,8 @@ class HuffmanNode implements Comparable<HuffmanNode> {
     }
 }
 
-class HuffmanResult {
-    public final byte[] dados;
-    public final int bitsValidos;
-    public HuffmanResult(byte[] dados, int bitsValidos) {
-        this.dados = dados;
-        this.bitsValidos = bitsValidos;
-    }
-}
-
 public class Huffman {
+    // Calcula o tamanho em bits da sequencia codificada
     private static long getInputBitLength(byte[] sequencia, HashMap<Byte, String> codigos) {
         long tamanho = 0;
         for (byte b : sequencia) {
@@ -41,17 +33,22 @@ public class Huffman {
         return tamanho;
     }
 
+    // Gera a árvore de Huffman e retorna o mapa de códigos
     public static HashMap<Byte, String> getHuffmanHash(byte[] sequencia, int versao) throws java.io.IOException {
         HashMap<Byte, Integer> freqMap = new HashMap<>();
+
+        // Conta a frequência de cada byte na sequência
         for (byte c : sequencia) {
             freqMap.put(c, freqMap.getOrDefault(c, 0) + 1);
         }
 
+        // Cria uma fila de prioridade com os nós para construir a árvore de Huffman
         PriorityQueue<HuffmanNode> pq = new PriorityQueue<>();
         for (Byte b : freqMap.keySet()) {
             pq.add(new HuffmanNode(b, freqMap.get(b)));
         }
 
+        // Constrói a árvore de Huffman
         while (pq.size() > 1) {
             HuffmanNode esq = pq.poll();
             HuffmanNode dir = pq.poll();
@@ -63,14 +60,18 @@ public class Huffman {
             pq.add(pai);
         }
 
+        // Adiciona raiz da árvore que é o único nó restante na fila de prioridade
         HuffmanNode raiz = pq.poll();
         HashMap<Byte, String> codigos = new HashMap<>();
         constroiCodigos(raiz, "", codigos);
+
+        // Salva a árvore de Huffman em um arquivo binário para decodificação
         salvarArv(raiz, versao, getInputBitLength(sequencia, codigos));
 
         return codigos;
     }
 
+    // Salva a árvore de Huffman em um arquivo binário
     public static void salvarArv(HuffmanNode raiz, int versao, long bitsValidos) throws java.io.IOException {
         try (java.io.DataOutputStream out = new java.io.DataOutputStream(new java.io.FileOutputStream("./arqs/ArvHuffman" + versao + ".bin"))) {
             out.writeLong(bitsValidos); // Escreve a quantidade de bits válidos no início
@@ -93,6 +94,7 @@ public class Huffman {
         }
     }
 
+    // Lê a árvore de Huffman de um arquivo binário
     public static HuffmanNode lerArv(RandomAccessFile in) throws java.io.IOException {
         int tipo = in.readByte();
         if (tipo == 0) return null; // nó nulo
@@ -107,6 +109,7 @@ public class Huffman {
         return no;
     }
 
+    // Constrói os códigos (hash) dos bytes a partir da árvore
     private static void constroiCodigos(HuffmanNode no, String codigo, HashMap<Byte, String> codigos) {
         if (no == null) {
             return;
@@ -120,35 +123,48 @@ public class Huffman {
         constroiCodigos(no.dir, codigo + "1", codigos);
     }
 
+    // Transforma a sequência de bytes em uma sequência comprimida usando os códigos do hash
     public static byte[] comprimir(byte[] sequencia, HashMap<Byte, String> codigos) {
         StringBuilder input = new StringBuilder();
+
+        // Obtem bits referentes a cada byte da sequência e junta em uma string
         for (byte b : sequencia) {
             input.append(codigos.get(b));
         }
 
-        // Converte a sequência de bits para um array de bytes
-        int tamanho = (input.length() + 7) / 8; // Arredonda para cima
+        // Converte a string de bits para um array de bytes
+        // Calcula tamanho necessario para guardar bytes, arredondando para cima
+        // os bits que sobrarem
+        int tamanho = (input.length() + 7) / 8; 
         byte[] output = new byte[tamanho];
+
+        // Preenche o array de bytes com os bits da string
         for (int i = 0; i < input.length(); i++) {
             if (input.charAt(i) == '1') {
+                // Insere bit na posição correta do byte
+                // (1 << (7 - (i % 8))) para deslocar os bits corretamente
+                // |= é um or bit a bit para adcionar o bit ao byte
+                // (i / 8) para selecionar o byte correto
                 output[i / 8] |= (1 << (7 - (i % 8)));
             }
         }
         return output;
     }    
 
-    // Versão buscando na tabela de códigos.
+    // Decodifica a sequência comprimida de volta para a sequência original
+    // Vai montando os codigos a partir da árvore de Huffman salva
     public static byte[] decodificar(byte[] sequencia, HuffmanNode raiz, long bitsValidos) {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         HuffmanNode atual = raiz;
         for (int i = 0; i < bitsValidos; i++) {
-            int byteIndex = i / 8;
-            int bitIndex = 7 - (i % 8);
-            boolean bit = ((sequencia[byteIndex] >> bitIndex) & 1) == 1;
-            atual = bit ? atual.dir : atual.esq;
+            int byteIndex = i / 8; // posição do byte na sequencia
+            int bitIndex = 7 - (i % 8); // posição do bit dentro do byte
+            boolean bit = ((sequencia[byteIndex] >> bitIndex) & 1) == 1; // pega o bit
+
+            atual = bit ? atual.dir : atual.esq; // vai para dir se bit for 1 e esq se for 0
             if (atual.esq == null && atual.dir == null) { // folha
-                output.write(atual.b);
-                atual = raiz;
+                output.write(atual.b); // adiciona byte ao arq de saida
+                atual = raiz; // volta para raiz
             }
         }
         return output.toByteArray();

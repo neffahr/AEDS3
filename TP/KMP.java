@@ -13,11 +13,9 @@ public class KMP {
             }
             else {
                 if (len != 0) { 
-                    // Update len to the previous lps value 
-                    // to avoid redundant comparisons
                     len = falhas[len - 1];
                 } else {
-                    // If no matching prefix found, set lps[i] to 0
+                    // Se não houver prefixo, o comprimento é 0
                     falhas[i] = 0;
                 }
             }
@@ -38,20 +36,17 @@ public class KMP {
                 i++;
                 j++;
 
-                // If the entire pattern is matched 
-                // store the start index in result
+                // Se j atingir o comprimento do padrão, encontramos uma ocorrência
                 if (j == m) {
                     ocorrencias.add(i - j);
                     
-                    // Use LPS of previous index to 
-                    // skip unnecessary comparisons
+                    // Pega a ultima posição de sucesso para calcular shift
+                    // Continua procurando outras ocorrências
                     j = vf[j - 1];
                 }
             } 
-            // If there is a mismatch
             else {
-                // Use lps value of previous index
-                // to avoid redundant comparisons
+                // Usar pega a ultima posição de sucesso do vetor de falhas
                 if (j != 0)
                     j = vf[j - 1];
                 else
