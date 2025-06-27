@@ -1,12 +1,10 @@
 import java.util.*;
+import java.io.*;
 import java.time.LocalDate;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.EOFException;
-import java.io.RandomAccessFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.nio.charset.StandardCharsets;
+
 
 class Registro {
     
@@ -49,6 +47,64 @@ class Registro {
         this.runtime = runtime;
         this.adult = adult;
         this.genre_name = genre_name;
+    }
+
+    // Converter objeto Registro em bytes:
+    public static byte[] registroParaBytes(Registro reg) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(bos);
+        
+        dos.writeInt(reg.getId());
+        dos.writeUTF(reg.getOrgTitle());
+        dos.writeUTF(reg.getTitle());
+        dos.write(reg.getOrgLanguage());
+        dos.writeUTF(reg.getOvr());
+        dos.writeLong(reg.getReleaseDate().toEpochDay());
+        dos.writeFloat(reg.getPopularity());
+        dos.writeInt(reg.getVoteCount());
+        dos.writeFloat(reg.getVoteAverage());
+        dos.writeInt(reg.getRuntime());
+        dos.writeByte(reg.getAdult());
+
+        List<String> genres = reg.getGenreName();
+        dos.writeByte(genres.size()); // Quantidade de gêneros
+        for (String genre : genres) {
+            dos.writeUTF(genre);
+        }
+
+        return bos.toByteArray();
+    }
+
+    // Reconstrói objeto de um vetor de bytes:
+    public static Registro bytesParaRegistro(byte[] bytes) throws IOException, ClassNotFoundException {
+        ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
+        DataInputStream dis = new DataInputStream(bis);
+        
+        Registro reg = new Registro();
+        reg.setId(dis.readInt());
+        reg.setOrgTitle(dis.readUTF());
+        reg.setTitle(dis.readUTF());
+        
+        byte[] lang = new byte[2];
+        dis.readFully(lang);
+        reg.setOrgLanguage(lang);
+        
+        reg.setOvr(dis.readUTF());
+        reg.setReleaseDate(LocalDate.ofEpochDay(dis.readLong()));
+        reg.setPopularity(dis.readFloat());
+        reg.setVoteCount(dis.readInt());
+        reg.setVoteAverage(dis.readFloat());
+        reg.setRuntime(dis.readInt());
+        reg.setAdult(dis.readByte());
+
+        byte qtd_genres = dis.readByte();
+        List<String> genres = new ArrayList<>();
+        for (int i = 0; i < qtd_genres; i++) {
+            genres.add(dis.readUTF());
+        }
+        reg.setGenreName(genres);
+
+        return reg;
     }
     
     @Override
@@ -820,7 +876,9 @@ class Registro {
     public static int getLastId() throws IOException {
         RandomAccessFile file = new RandomAccessFile(DB_BINARIO, "r");
         file.seek(0);
-        return file.readInt();
+        int lastId = file.readInt();
+        file.close();
+        return lastId;
     }
 
     public static long getPos(Registro reg, RandomAccessFile file) throws IOException{
